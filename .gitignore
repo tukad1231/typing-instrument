@@ -1,0 +1,13 @@
+.claude/
+ALL_SOURCE.txt
+REVIEW_PROMPT.md
+node_modules/
+*.zip
+*.webm
+.DS_Store
+Thumbs.db
+.env
+.env.*
+!.env.example
+*.log
+/session_*/

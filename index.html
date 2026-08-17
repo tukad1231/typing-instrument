@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en" translate="no">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="google" content="notranslate" />
+    <title>TYPING INSTRUMENT</title>
+    <link rel="stylesheet" href="./src/ui/styles.css" />
+  </head>
+  <body class="simple">
+    <!-- ================= START GATE ================= -->
+    <div id="gate">
+      <div class="gate-box">
+        <h1>TYPING INSTRUMENT</h1>
+        <p class="sub">Your typing is the instrument. No music theory required.</p>
+        <!--
+          Starts disabled on purpose. src/main.js enables it only once its whole
+          module graph has loaded AND its click handler is attached, so a click
+          can never land in the gap between "page painted" and "code running".
+        -->
+        <button id="startBtn" class="big" type="button" disabled>LOADING…</button>
+        <p class="tiny">
+          headphones recommended &middot; then just type
+        </p>
+        <p id="bootStage" class="stage" hidden></p>
+        <div id="bootErr" hidden>
+          <h2 id="bootErrTitle"></h2>
+          <p id="bootErrBody"></p>
+          <pre id="bootErrCmd"></pre>
+          <pre id="bootLogView"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!--
+      Boot guard. A plain (non-module) script so it runs even when the module
+      graph fails to load. Its ONLY jobs are:
+        1. open the boot log, so a stalled start can be diagnosed on screen
+        2. report a module graph that never arrived
+      It deliberately does NOT touch the START button's behaviour -- owning that
+      in two places is what caused the lost-first-click bug in v0.1.
+    -->
+    <script>
+      (function () {
+        var t0 = performance.now();
+
+        window.__bootLog = [];
+        window.__bootMark = function (code, label, state) {
+          var e = { code: code, label: label, state: state || 'OK', ms: Math.round(performance.now() - t0) };
+          window.__bootLog.push(e);
+          return e;
+        };
+        window.__bootMark('H01', 'HTML_READY');
+        // proof for self-test 6 that START could not be clicked too early
+        window.__startInitiallyDisabled = document.getElementById('startBtn').disabled;
+
+        window.__bootLogText = function () {
+          return window.__bootLog
+            .map(function (e) {
+              return String(e.ms).padStart(6) + 'ms  ' + e.code + ' ' + e.label + ' ' + e.state;
+            })
+            .join('\n');
+        };
+
+        var shown = false;
+        window.__bootError = function (title, body, cmd) {
+          if (shown) return;
+          shown = true;
+          document.getElementById('startBtn').disabled = true;
+          document.getElementById('bootErrTitle').textContent = title;
+          document.getElementById('bootErrBody').textContent = body;
+          document.getElementById('bootErrCmd').textContent = cmd || '';
+          document.getElementById('bootErrCmd').hidden = !cmd;
+          document.getElementById('bootLogView').textContent = window.__bootLogText();
+          document.getElementById('bootErr').hidden = false;
+        };
+
+        if (location.protocol === 'file:') {
+          window.__bootMark('H02', 'FILE_PROTOCOL', 'NG');
+          window.__bootError(
+            'サーバー経由で開いてください',
+            'index.html を直接開くとブラウザがモジュールの読み込みをブロックするため、STARTが動きません。' +
+              'このフォルダで start.bat を実行するか、下のコマンドを実行して http://localhost:5173 を開いてください。',
+            'node server.js'
+          );
+          return;
+        }
+
+        window.addEventListener(
+          'error',
+          function (e) {
+            if (e.target && e.target.tagName === 'SCRIPT') {
+              window.__bootMark('E01', 'SCRIPT_LOAD_FAILED', 'NG');
+              window.__bootError('読み込みに失敗しました', 'スクリプトを取得できませんでした: ' + (e.target.src || ''));
+            } else if (e.message) {
+              window.__bootMark('E02', 'UNCAUGHT_ERROR', 'NG');
+              window.__bootError('エラーが発生しました', e.message + ' (' + (e.filename || '') + ':' + (e.lineno || '') + ')');
+            }
+          },
+          true
+        );
+
+        window.addEventListener('unhandledrejection', function (e) {
+          var r = e.reason;
+          window.__bootMark('E03', 'UNHANDLED_REJECTION', 'NG');
+          window.__bootError('エラーが発生しました', (r && (r.message || r)) + '');
+        });
+
+        // The one remaining watchdog: did the module graph ever arrive?
+        setTimeout(function () {
+          if (!window.__typingReady) {
+            window.__bootMark('E04', 'MODULE_NEVER_READY', 'NG');
+            window.__bootError(
+              '起動できませんでした',
+              'ページは表示されましたがプログラムが読み込めていません。' +
+                'Ctrl+Shift+R で強制再読み込みしてください。直らない場合は、下の起動ログをそのまま伝えてください。',
+              'node server.js'
+            );
+          }
+        }, 5000);
+      })();
+    </script>
+
+    <!-- ================= APP ================= -->
+    <div id="app" hidden>
+      <div id="hiddenWarn" hidden>
+        WARNING: Keep this tab in the foreground during performance. ループのタイミングが乱れます。
+      </div>
+
+      <header id="bar">
+        <div class="brand">TYPING&nbsp;INSTRUMENT</div>
+        <label class="keep">Sound
+          <select id="soundSet">
+            <option value="electronic">Electronic</option>
+            <option value="minimal">Minimal</option>
+            <option value="noise">Noise</option>
+          </select>
+        </label>
+        <label class="adv">Tempo <input id="bpm" type="range" min="70" max="170" step="1" value="120" /><span id="bpmVal">120</span></label>
+        <label class="adv">Complexity <input id="complexity" type="range" min="0" max="100" step="1" value="40" /><span id="cxVal">40</span></label>
+        <label class="adv">Timing
+          <select id="quantize">
+            <option value="OFF">Off</option>
+            <option value="LIGHT" selected>Light</option>
+            <option value="STRONG">Strong</option>
+          </select>
+        </label>
+        <label class="keep">Volume <input id="volume" type="range" min="0" max="100" step="1" value="80" /></label>
+        <button id="advBtn" class="ghost">ADVANCED</button>
+        <button id="viewBtn" class="ghost">PERFORM VIEW</button>
+      </header>
+
+      <section id="meters" class="adv">
+        <div class="meter"><span class="k">Keys/sec</span><b id="mKps">0.0</b></div>
+        <div class="meter"><span class="k">Intensity</span><b id="mInt">0</b><i class="barwrap"><i id="barInt"></i></i></div>
+        <div class="meter"><span class="k">Groove</span><b id="mGroove">0</b><i class="barwrap"><i id="barGroove"></i></i></div>
+        <div class="meter"><span class="k">Space</span><b id="mSpace">0</b><i class="barwrap"><i id="barSpace"></i></i></div>
+        <div class="meter pulse"><span class="k">Bar</span><i class="dot" id="barDot"></i></div>
+      </section>
+
+      <section id="stage">
+        <textarea id="text" spellcheck="false" autocomplete="off" placeholder="type anything — fujirock ni detai"></textarea>
+      </section>
+
+      <section id="createOnly">
+        <div class="panel">
+          <h2>LOOPS <small>Space = phrase &nbsp;·&nbsp; Enter = commit layer</small></h2>
+          <div id="layers"></div>
+          <div class="row addrow">
+            <span class="k">Add foundation:</span>
+            <button data-loop="beat" class="add">Beat</button>
+            <button data-loop="minimal" class="add">Minimal</button>
+            <button data-loop="bass" class="add">Bass</button>
+            <button data-loop="ambient" class="add">Ambient</button>
+            <button data-loop="pulse" class="add">Pulse</button>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>CURRENT</h2>
+          <div class="grid2 adv">
+            <span class="k">Key</span><b id="cKey">—</b>
+            <span class="k">Hand</span><b id="cHand">—</b>
+            <span class="k">Group</span><b id="cGroup">—</b>
+            <span class="k">Phrase</span><b id="cPhrase">—</b>
+            <span class="k">Hold</span><b id="cHold">—</b>
+          </div>
+          <div class="row">
+            <button id="recBtn" class="rec">● RECORD</button>
+            <button id="stopBtn">■ STOP</button>
+            <button id="replayBtn">▶ REPLAY</button>
+            <button id="exportBtn">EXPORT SESSION</button>
+            <button id="clearBtn" class="warn">CLEAR ALL</button>
+          </div>
+          <div class="row adv">
+            <button id="debugBtn" class="ghost small">debug</button>
+            <button id="testBtn" class="ghost small">self-test</button>
+          </div>
+          <div class="row"><span id="status" class="status"></span></div>
+        </div>
+
+        <div class="panel" id="cheat">
+          <h2>WHAT YOUR HANDS DO</h2>
+          <pre class="zones">
+ 1 2 3 4 5 6 7 8 9 0   chord bed
+ Q W E R T │ Y U I O P   bass  │ bell
+ A S D F G │ H J K L ;   drums │ MELODY
+ Z X C V B │ N M , . /   low   │ voice</pre>
+          <ul class="rules">
+            <li><b>hold a key</b> → the note holds that long</li>
+            <li><b>same key 4×</b> → drum roll / ratchet</li>
+            <li><b>Shift</b> → deliberately outside note</li>
+            <li><b>type faster</b> → brighter, denser, an octave layer fades in</li>
+            <li><b>steady rhythm</b> → tighter, more echo</li>
+            <li><b>pause then type</b> → accent with a long tail</li>
+            <li><b>Backspace</b> → reverse tail (and it stays in the loop)</li>
+            <li class="locked"><b>Complexity 30+</b> → repeats climb chromatically, long words climb</li>
+            <li class="locked"><b>Complexity 50+</b> → alternating hands add a 5th</li>
+            <li class="locked"><b>Complexity 70+</b> → every 4th note gets a sub</li>
+          </ul>
+          <p class="note">Nothing here is random. Same keys, same timing, same settings → the same performance, note for note. The ambience around it can vary a little between replays.</p>
+        </div>
+      </section>
+
+      <section id="debug" hidden>
+        <h2>DEBUG</h2>
+        <div class="row">
+          <button id="bootLogBtn" class="ghost small">boot log</button>
+          <button id="sessionLogBtn" class="ghost small">session log</button>
+        </div>
+        <div id="debugBody"></div>
+      </section>
+    </div>
+
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
