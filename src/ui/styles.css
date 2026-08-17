@@ -12,6 +12,13 @@
 
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute must always win.
+   The UA rule for it is `[hidden] { display: none }`, which any selector with
+   an id or a class outranks -- `#gate { display: grid }` did exactly that, so
+   pressing START set gate.hidden = true and the start screen stayed on screen,
+   full-size, at z-index 50, swallowing every click meant for the app. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);

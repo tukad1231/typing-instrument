@@ -1021,6 +1021,62 @@ export function runSelfTests({ mapping, settings, recorder, session, loop, perf 
     add('11 boot sequence', false, String(e));
   }
 
+  // =========================================================================
+  // 12. the start gate is actually GONE after START, not just flagged hidden
+  // =========================================================================
+  // `boot()` set gate.hidden = true and app.hidden = false, and every earlier
+  // check passed -- while the start screen stayed on screen at full size,
+  // z-index 50, swallowing every click meant for the app. `#gate { display:
+  // grid }` outranks the UA rule `[hidden] { display: none }`, so the
+  // attribute did nothing at all.
+  //
+  // Checking DOM flags is not checking the screen. This looks at what is
+  // actually rendered, and at where a click would land.
+  try {
+    const gate = document.getElementById('gate');
+    const app = document.getElementById('app');
+    const gateStyle = getComputedStyle(gate).display;
+    const appStyle = getComputedStyle(app).display;
+    const box = gate.getBoundingClientRect();
+    const centre = document.elementFromPoint(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2));
+    const gateOnTop = !!(centre && gate.contains(centre));
+
+    // The attribute must still work BOTH ways on everything that toggles it,
+    // so the fix cannot degenerate into "stop using hidden".
+    const toggles = ['bootErr', 'bootStage', 'debug', 'hiddenWarn'].map((id) => {
+      const el = document.getElementById(id);
+      if (!el) return { id, ok: false };
+      const was = el.hidden;
+      el.hidden = true;
+      const off = getComputedStyle(el).display;
+      el.hidden = false;
+      const on = getComputedStyle(el).display;
+      el.hidden = was;
+      return { id, ok: off === 'none' && on !== 'none' };
+    });
+    const togglesOk = toggles.every((t) => t.ok);
+
+    const ok =
+      gate.hidden === true &&
+      gateStyle === 'none' &&
+      app.hidden === false &&
+      appStyle !== 'none' &&
+      box.width === 0 &&
+      box.height === 0 &&
+      !gateOnTop &&
+      togglesOk;
+
+    add(
+      '12 start gate is really gone after START',
+      ok,
+      `gate.hidden ${gate.hidden}, computed display "${gateStyle}", box ${box.width}x${box.height}, ` +
+        `covering the centre of the screen: ${gateOnTop} · app.hidden ${app.hidden}, display "${appStyle}" · ` +
+        `[hidden] honoured both ways on ${toggles.filter((t) => t.ok).length}/${toggles.length} toggling elements`
+    );
+  } catch (e) {
+    add('12 start gate is really gone after START', false, String(e));
+  }
+
   return results;
 }
 
