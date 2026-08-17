@@ -129,6 +129,8 @@ export function buildTimeline(layer, { live = true, playingBpm = 120, beatsPerBa
 export function renderTracks(host, view, h, opts = {}) {
   const drag = opts.drag;
   const target = view.nextFreeLayer;
+  const ja = opts.locale === 'ja';
+  const tx = (en, jp) => (ja ? jp : en);
 
   // Mid-drag: touch nothing but the number. See the header.
   if (drag && drag.active) {
@@ -156,18 +158,20 @@ export function renderTracks(host, view, h, opts = {}) {
 
     // --- head -------------------------------------------------------------
     const head = el('div', { className: 'track-head' }, [
-      el('span', { className: 'track-num', text: 'TRACK ' + (l.id + 1) }),
+      el('span', { className: 'track-num', text: tx('TRACK ', 'トラック ') + (l.id + 1) }),
       el('span', {
         className: 'track-name',
         // textContent, never innerHTML: a loop is named after the words that
         // were typed into it, and those are arbitrary user text.
-        text: filled ? l.name : 'Empty',
+        text: filled ? l.name : tx('Empty', '空き'),
         title: filled ? l.name : '',
       }),
       el('span', {
         className: 'track-kind',
         text: filled
-          ? `${l.kind === 'builtin' ? 'preset' : 'typing'} · ${l.bars} bar${l.bars > 1 ? 's' : ''} · ${l.eventCount} notes`
+          ? (ja
+              ? `${l.kind === 'builtin' ? 'プリセット' : 'タイピング'} · ${l.bars}小節 · ${l.eventCount}音`
+              : `${l.kind === 'builtin' ? 'preset' : 'typing'} · ${l.bars} bar${l.bars > 1 ? 's' : ''} · ${l.eventCount} notes`)
           : '',
       }),
     ]);
@@ -184,14 +188,14 @@ export function renderTracks(host, view, h, opts = {}) {
         }),
         el('button', {
           className: 'chip' + (l.muted ? ' muted' : ''),
-          text: l.muted ? 'MUTED' : 'MUTE',
+          text: l.muted ? tx('MUTED', 'ミュート中') : tx('MUTE', 'ミュート'),
           'aria-pressed': l.muted ? 'true' : 'false',
           onclick: () => h.onMute(l.id, !l.muted),
         }),
         el('button', {
           className: 'chip danger',
-          text: 'DELETE',
-          title: 'Delete this track (you can undo it)',
+          text: tx('DELETE', '削除'),
+          title: tx('Delete this track (you can undo it)', 'このトラックを削除（元に戻せます）'),
           onclick: () => h.onDelete(l.id),
         }),
       ]);
@@ -205,7 +209,7 @@ export function renderTracks(host, view, h, opts = {}) {
         max: '100',
         step: '1',
         value: String(Math.round(l.volume * 100)),
-        'aria-label': 'Track ' + (l.id + 1) + ' volume',
+        'aria-label': tx('Track ', 'トラック ') + (l.id + 1) + tx(' volume', 'の音量'),
       });
       const volLabel = el('span', { className: 'vol', text: Math.round(l.volume * 100) + '%' });
 
@@ -223,19 +227,19 @@ export function renderTracks(host, view, h, opts = {}) {
       range.addEventListener('input', (e) => h.onVolume(l.id, +(e.target.value / 100).toFixed(3)));
 
       card.appendChild(el('div', { className: 'track-foot' }, [
-        el('span', { className: 'k', text: 'VOLUME' }),
+        el('span', { className: 'k', text: tx('VOLUME', '音量') }),
         range,
         volLabel,
       ]));
     } else if (l.id === target) {
-      card.appendChild(el('div', { className: 'track-empty-msg', text: 'The next loop lands here' }));
+      card.appendChild(el('div', { className: 'track-empty-msg', text: tx('The next loop lands here', '次のループはここに入ります') }));
       const presetRow = el('div', { className: 'preset-row', hidden: true });
       for (const [keyName, label] of opts.presets || []) {
         presetRow.appendChild(el('button', { className: 'chip add', text: label, dataset: { loop: keyName }, onclick: () => h.onPreset(keyName) }));
       }
       const presetBtn = el('button', {
         className: 'ghost presetToggle',
-        text: 'Add a preset',
+        text: tx('Add a preset', 'プリセットを追加'),
         'aria-expanded': 'false',
         onclick: () => {
           presetRow.hidden = !presetRow.hidden;
@@ -243,14 +247,14 @@ export function renderTracks(host, view, h, opts = {}) {
         },
       });
       card.appendChild(el('div', { className: 'track-actions' }, [
-        el('button', { className: 'primary typeLoop', text: '+ Type a loop', onclick: () => h.onCreate() }),
+        el('button', { className: 'primary typeLoop', text: tx('+ Type a loop', '+ タイピングでループ作成'), onclick: () => h.onCreate() }),
         presetBtn,
       ]));
       card.appendChild(presetRow);
     } else {
       // Loops always land in the first free track, so offering a create button
       // here would be a promise the engine does not keep.
-      card.appendChild(el('div', { className: 'track-empty-msg', text: 'Tracks are filled from top to bottom' }));
+      card.appendChild(el('div', { className: 'track-empty-msg', text: tx('Tracks are filled from top to bottom', 'トラックは上から順に使われます') }));
       card.classList.add('waiting');
     }
 

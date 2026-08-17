@@ -20,12 +20,14 @@
       <div class="home-inner">
         <header class="home-head">
           <h1>TYPING&nbsp;INSTRUMENT</h1>
-          <p class="sub">Your typing is the instrument. No music theory required.</p>
+          <p class="sub" data-en="Your typing is the instrument. No music theory required."
+             data-ja="あなたのタイピングが、そのまま楽器になる。音楽理論は必要ありません。">Your typing is the instrument. No music theory required.</p>
+          <button id="langBtnHome" class="lang-switch" type="button">日本語</button>
         </header>
 
         <!-- filled in by main.js when there is something to continue -->
         <button id="continueBtn" class="continue-card" type="button" hidden>
-          <span class="cc-kicker">Continue where you left off</span>
+          <span class="cc-kicker" data-en="Continue where you left off" data-ja="前回の続きから">Continue where you left off</span>
           <span class="cc-title" id="continueTitle"></span>
           <span class="cc-meta" id="continueMeta"></span>
         </button>
@@ -38,16 +40,17 @@
             running". That gap is what ate the first click in v0.1.
           -->
           <button id="newBtn" class="big primary" type="button" disabled>LOADING…</button>
-          <button id="openFileBtn" class="ghost big" type="button" disabled>Open a project file…</button>
+          <button id="openFileBtn" class="ghost big" type="button" disabled data-en="Open a project file…" data-ja="プロジェクトファイルを開く…">Open a project file…</button>
           <input id="importFile" type="file" accept=".json,application/json" hidden />
         </div>
 
         <section id="recent" hidden>
-          <h2>Recent pieces</h2>
+          <h2 data-en="Recent pieces" data-ja="最近の曲">Recent pieces</h2>
           <div id="recentList" class="recent-list"></div>
         </section>
 
-        <p class="tiny home-note">
+        <p class="tiny home-note" data-en="Headphones recommended. Everything you make stays on this computer — nothing is uploaded."
+           data-ja="ヘッドホン推奨。作ったものはこのブラウザ内だけに保存され、外部へ送信されません。">
           Headphones recommended. Everything you make stays on this computer — nothing is uploaded.
         </p>
 
@@ -159,7 +162,8 @@
          ==================================================================== -->
     <div id="app" hidden>
       <header id="topbar">
-        <button id="homeBtn" class="chip ghost" type="button" title="Back to your pieces">‹ Pieces</button>
+        <button id="homeBtn" class="chip ghost" type="button" title="Back to your pieces"
+                data-en="‹ Pieces" data-ja="‹ 曲一覧" data-title-en="Back to your pieces" data-title-ja="曲一覧へ戻る">‹ Pieces</button>
 
         <label class="title-wrap">
           <span class="sr-only">Piece title</span>
@@ -171,13 +175,16 @@
 
         <span class="topbar-spacer"></span>
 
-        <button id="stopBtn" class="chip" type="button" title="Stop everything">■ Stop</button>
-        <button id="recBtn" class="chip rec" type="button" title="Record the whole performance">● Capture</button>
+        <button id="langBtn" class="chip ghost" type="button">日本語</button>
+
+        <button id="stopBtn" class="chip" type="button" title="Stop everything" data-title-en="Stop everything" data-title-ja="すべての音を停止">■ Stop</button>
+        <button id="recBtn" class="chip rec" type="button" title="Record the whole performance" data-title-en="Record the whole performance" data-title-ja="演奏全体を録音">● Capture</button>
         <button id="replayBtn" class="chip" type="button">▶ Replay</button>
-        <button id="exportBtn" class="chip" type="button" title="Write audio + the performance log to a zip">Export</button>
-        <button id="inspectorBtn" class="chip" type="button" aria-expanded="false">Settings</button>
-        <button id="helpBtn" class="chip" type="button" aria-expanded="false">Help</button>
-        <button id="viewBtn" class="chip" type="button">Perform</button>
+        <button id="exportBtn" class="chip" type="button" title="Write audio + the performance log to a zip"
+                data-en="Export" data-ja="書き出す" data-title-en="Write audio + the performance log to a zip" data-title-ja="音声と演奏ログをZIPに書き出す">Export</button>
+        <button id="inspectorBtn" class="chip" type="button" aria-expanded="false" data-en="Settings" data-ja="設定">Settings</button>
+        <button id="helpBtn" class="chip" type="button" aria-expanded="false" data-en="Help" data-ja="使い方">Help</button>
+        <button id="viewBtn" class="chip" type="button" data-en="Perform" data-ja="演奏画面">Perform</button>
       </header>
 
       <div id="hiddenWarn" hidden>
@@ -189,15 +196,17 @@
         <section id="play">
           <textarea id="text" spellcheck="false" autocomplete="off" autocapitalize="off"
                     aria-label="Play here — every key is an instrument"
-                    placeholder="type anything — fujirock ni detai"></textarea>
+                    placeholder="type anything — fujirock ni detai"
+                    data-placeholder-en="type anything — fujirock ni detai"
+                    data-placeholder-ja="ここで自由にタイプしてください — すべてのキーが音になります"></textarea>
           <div id="roleStrip" class="rolestrip" aria-live="off">
             <span class="role-now"><i class="dot" id="barDot"></i><b id="cGroup">ready</b></span>
-            <span class="role-key"><span class="k">key</span><b id="cKey">—</b></span>
-            <span class="role-hand"><span class="k">hand</span><b id="cHand">—</b></span>
-            <span class="role-phrase"><span class="k">phrase</span><b id="cPhrase">—</b></span>
-            <span class="role-hold"><span class="k">hold</span><b id="cHold">—</b></span>
+            <span class="role-key"><span class="k" data-en="key" data-ja="キー">key</span><b id="cKey">—</b></span>
+            <span class="role-hand"><span class="k" data-en="hand" data-ja="手">hand</span><b id="cHand">—</b></span>
+            <span class="role-phrase"><span class="k" data-en="phrase" data-ja="フレーズ">phrase</span><b id="cPhrase">—</b></span>
+            <span class="role-hold"><span class="k" data-en="hold" data-ja="長さ">hold</span><b id="cHold">—</b></span>
           </div>
-          <button id="focusBack" class="focus-back" type="button" hidden>Click here to keep playing</button>
+          <button id="focusBack" class="focus-back" type="button" hidden data-en="Click here to keep playing" data-ja="ここをクリックして演奏を続ける">Click here to keep playing</button>
         </section>
 
         <!-- ---------- ONE next step, never a list ------------------------- -->
@@ -223,15 +232,15 @@
         <!-- ---------- COMPOSE A LOOP -------------------------------------- -->
         <section id="compose" hidden>
           <div class="compose-head">
-            <b>Type a short phrase</b>
-            <span>Press <kbd>Enter</kbd> to make it loop</span>
+            <b data-en="Type a short phrase" data-ja="短いフレーズを弾く">Type a short phrase</b>
+            <span><span data-en="Press" data-ja="">Press</span> <kbd>Enter</kbd> <span data-en="to make it loop" data-ja="でループにする">to make it loop</span></span>
             <span class="compose-target">→ <b id="composeTarget">TRACK 1</b></span>
           </div>
           <div class="compose-body">
-            <span class="k">notes waiting</span><b id="pendingCount">0</b>
-            <span class="k">estimated length</span><b id="pendingBars">—</b>
-            <button id="commitBtn" class="primary" type="button">COMMIT LOOP</button>
-            <button id="cancelComposeBtn" class="ghost" type="button">CLOSE — KEEP NOTES</button>
+            <span class="k" data-en="notes waiting" data-ja="待機中の音">notes waiting</span><b id="pendingCount">0</b>
+            <span class="k" data-en="estimated length" data-ja="推定の長さ">estimated length</span><b id="pendingBars">—</b>
+            <button id="commitBtn" class="primary" type="button" data-en="COMMIT LOOP" data-ja="ループを確定">COMMIT LOOP</button>
+            <button id="cancelComposeBtn" class="ghost" type="button" data-en="CLOSE — KEEP NOTES" data-ja="閉じる（音は残す）">CLOSE — KEEP NOTES</button>
           </div>
           <p id="composeWhy" class="compose-note">
             Closing does not throw anything away. What you already played stays waiting, and the
@@ -241,26 +250,27 @@
 
         <!-- ---------- TRACKS ---------------------------------------------- -->
         <section class="panel" id="tracksPanel">
-          <h2>Tracks <small><kbd>Space</kbd> ends a phrase · <kbd>Enter</kbd> makes a loop · 4 tracks</small></h2>
+          <h2><span data-en="Tracks" data-ja="トラック">Tracks</span> <small><kbd>Space</kbd> <span data-en="ends a phrase" data-ja="でフレーズ区切り"></span> · <kbd>Enter</kbd> <span data-en="makes a loop · 4 tracks" data-ja="でループ化 · 全4トラック">makes a loop · 4 tracks</span></small></h2>
           <div id="tracks"></div>
         </section>
 
         <!-- ---------- STORY STRIP ----------------------------------------- -->
         <section class="panel" id="storyPanel">
-          <h2>Story
-            <small>Save a mix, then press the sections in order to perform the arrangement</small>
+          <h2><span data-en="Story" data-ja="曲の展開">Story</span>
+            <small data-en="Save a mix, then press the sections in order to perform the arrangement"
+                   data-ja="ミックスをセクションとして保存し、順番に押して曲を展開します">Save a mix, then press the sections in order to perform the arrangement</small>
           </h2>
           <div id="storyStrip" class="story-strip"></div>
           <div class="story-actions">
-            <button id="storyAddBtn" class="chip" type="button">+ Save this mix as a section</button>
-            <button id="storyProposeBtn" class="chip ghost" type="button">Suggest a shape</button>
+            <button id="storyAddBtn" class="chip" type="button" data-en="+ Save this mix as a section" data-ja="+ このミックスをセクションに保存">+ Save this mix as a section</button>
+            <button id="storyProposeBtn" class="chip ghost" type="button" data-en="Suggest a shape" data-ja="曲の構成を提案">Suggest a shape</button>
             <span id="storyHint" class="hint"></span>
           </div>
         </section>
 
         <!-- ---------- WHERE THIS PIECE IS AT ------------------------------ -->
         <section class="panel" id="progressPanel">
-          <h2>This piece</h2>
+          <h2 data-en="This piece" data-ja="この曲の状態">This piece</h2>
           <div id="progressBody" class="progress-body"></div>
         </section>
       </main>
@@ -268,40 +278,41 @@
       <!-- ---------- INSPECTOR (settings, advanced, developer) ------------- -->
       <aside id="inspector" hidden aria-label="Settings">
         <div class="inspector-head">
-          <b>Settings</b>
+          <b data-en="Settings" data-ja="設定">Settings</b>
           <button id="inspectorClose" class="x" type="button" aria-label="Close settings">×</button>
         </div>
 
         <div class="inspector-body">
           <div class="field">
-            <label for="soundSet">Sound</label>
+            <label for="soundSet" data-en="Sound" data-ja="音色">Sound</label>
             <select id="soundSet"></select>
             <p class="field-hint" id="soundHint"></p>
-            <button id="previewSound" class="chip ghost" type="button">Hear it</button>
+            <button id="previewSound" class="chip ghost" type="button" data-en="Hear it" data-ja="試聴する">Hear it</button>
           </div>
 
           <div class="field">
-            <label for="volume">Volume</label>
+            <label for="volume" data-en="Volume" data-ja="音量">Volume</label>
             <input id="volume" type="range" min="0" max="100" step="1" value="80" />
           </div>
 
           <div class="field">
-            <label for="bpm">Tempo <span id="bpmVal" class="num">120</span></label>
+            <label for="bpm"><span data-en="Tempo" data-ja="テンポ">Tempo</span> <span id="bpmVal" class="num">120</span></label>
             <input id="bpm" type="range" min="70" max="170" step="1" value="120" />
           </div>
 
           <div class="field">
-            <label for="complexity">How much the instrument does <span id="cxVal" class="num">40</span></label>
+            <label for="complexity"><span data-en="How much the instrument does" data-ja="楽器側のアレンジ量">How much the instrument does</span> <span id="cxVal" class="num">40</span></label>
             <input id="complexity" type="range" min="0" max="100" step="1" value="40" />
-            <p class="field-hint">Low: your keys, plainly. High: repeats climb, hands answer each other, phrases grow.</p>
+            <p class="field-hint" data-en="Low: your keys, plainly. High: repeats climb, hands answer each other, phrases grow."
+               data-ja="低い：打鍵を素直に鳴らす。高い：同じキーの連打で音程が上がり、左右の手が応答し、フレーズが発展する。">Low: your keys, plainly. High: repeats climb, hands answer each other, phrases grow.</p>
           </div>
 
           <div class="field">
-            <label for="quantize">Timing help</label>
+            <label for="quantize" data-en="Timing help" data-ja="タイミング補正">Timing help</label>
             <select id="quantize">
-              <option value="OFF">Off — exactly as you played it</option>
-              <option value="LIGHT" selected>Light — nudged towards the grid</option>
-              <option value="STRONG">Strong — locked to the grid</option>
+              <option value="OFF" data-en="Off — exactly as you played it" data-ja="オフ — 打った通り">Off — exactly as you played it</option>
+              <option value="LIGHT" selected data-en="Light — nudged towards the grid" data-ja="弱 — 自然に拍へ寄せる">Light — nudged towards the grid</option>
+              <option value="STRONG" data-en="Strong — locked to the grid" data-ja="強 — 拍へ揃える">Strong — locked to the grid</option>
             </select>
           </div>
 
@@ -317,13 +328,13 @@
           </details>
 
           <div class="field">
-            <label>This piece</label>
+            <label data-en="This piece" data-ja="この曲">This piece</label>
             <div class="row">
-              <button id="duplicateBtn" class="chip" type="button">Keep this version</button>
-              <button id="downloadProjectBtn" class="chip" type="button">Download project</button>
+              <button id="duplicateBtn" class="chip" type="button" data-en="Keep this version" data-ja="この版を複製して残す">Keep this version</button>
+              <button id="downloadProjectBtn" class="chip" type="button" data-en="Download project" data-ja="プロジェクトを保存">Download project</button>
             </div>
             <div class="row">
-              <button id="clearBtn" class="chip warn" type="button">Clear everything</button>
+              <button id="clearBtn" class="chip warn" type="button" data-en="Clear everything" data-ja="すべて消去">Clear everything</button>
             </div>
             <p class="field-hint">
               “Download project” is a backup of the whole piece. “Export” writes the recorded take:
@@ -348,7 +359,7 @@
       <div id="sheet" hidden role="dialog" aria-modal="true" aria-label="Help">
         <div class="sheet-card">
           <div class="sheet-head">
-            <b>What your hands do</b>
+            <b data-en="What your hands do" data-ja="キー操作と音の役割">What your hands do</b>
             <button id="sheetClose" class="x" type="button" aria-label="Close help">×</button>
           </div>
           <div class="sheet-body">
@@ -361,7 +372,8 @@
               <li><b>hold a key</b> → bass, melody, chord and voice keep sounding. On Piano and Plucked they fade
                 by themselves and holding only delays the damping.</li>
               <li><b>drums, FX and bells</b> → one-shot. They finish on their own; holding does nothing.</li>
-              <li><b>same key 4×</b> → drum roll / ratchet</li>
+              <li data-en="same pitched key repeatedly → climbs by one semitone, up to +4 (Complexity 30+)" data-ja="同じ音程キーを連打 → 2〜5打目で半音ずつ上がる（Complexity 30以上）">same pitched key repeatedly → climbs by one semitone, up to +4 (Complexity 30+)</li>
+              <li data-en="same drum key 4× → drum roll / ratchet" data-ja="同じドラムキーを4回以上 → ドラムロール／ラチェット">same drum key 4× → drum roll / ratchet</li>
               <li><b>Shift</b> → deliberately outside note</li>
               <li><b>type faster</b> → brighter, denser, an octave layer fades in</li>
               <li><b>steady rhythm</b> → tighter, more echo</li>
@@ -391,11 +403,12 @@
       <div id="kitPicker" hidden role="dialog" aria-modal="true" aria-label="Choose a starting sound">
         <div class="sheet-card">
           <div class="sheet-head">
-            <b>Choose a starting sound</b>
+            <b data-en="Choose a starting sound" data-ja="最初のサウンドを選ぶ">Choose a starting sound</b>
             <button id="kitClose" class="x" type="button" aria-label="Close">×</button>
           </div>
           <div class="sheet-body">
-            <p class="lead">Each one sets up a room to play in. The music is still all yours.</p>
+            <p class="lead" data-en="Each one sets up a room to play in. The music is still all yours."
+               data-ja="音色・テンポ・土台を用意します。そこから作る音楽はすべてあなたのものです。">Each one sets up a room to play in. The music is still all yours.</p>
             <div id="kitList" class="kit-list"></div>
           </div>
         </div>

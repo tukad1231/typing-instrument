@@ -240,6 +240,7 @@ export const EXPECTED_MODULES = [
   '/src/project/projectController.js',
   '/src/story/storyStrip.js',
   '/src/ui/dom.js',
+  '/src/ui/i18n.js',
   '/src/ui/tracksView.js',
   '/src/ui/commitLoop.js',
   '/src/ui/starterKits.js',

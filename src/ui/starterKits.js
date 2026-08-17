@@ -24,6 +24,20 @@ import { EV } from '../session/sessionEvents.js';
 
 export const STARTER_KITS = [
   {
+    id: 'dusk-piano',
+    name: 'DUSK PIANO',
+    nameJa: '夕暮れのピアノ',
+    tagline: 'Melancholy keys over a dusty slow beat',
+    taglineJa: '哀愁のあるピアノと、乾いたスロービート',
+    detail: 'An original downtempo room: restrained piano, soft bass and plenty of air.',
+    detailJa: '静かなピアノ、柔らかい低音、広い余白。ダウンテンポのオリジナル作例です。',
+    accent: 'dusk',
+    settings: { soundSet: 'piano', bpm: 92, complexity: 20, quantize: 'LIGHT' },
+    foundation: 'dusk',
+    firstMove: 'Play H J K slowly, then leave a breath before you repeat it',
+    firstMoveJa: 'H・J・Kをゆっくり弾き、少し間を空けて繰り返してみてください',
+  },
+  {
     id: 'neon-pulse',
     name: 'NEON PULSE',
     tagline: 'A clear beat to play over',
@@ -32,6 +46,10 @@ export const STARTER_KITS = [
     settings: { soundSet: 'electronic', bpm: 120, complexity: 40, quantize: 'LIGHT' },
     foundation: 'beat',
     firstMove: 'Type 8–24 letters with your right hand',
+    nameJa: 'ネオン・パルス',
+    taglineJa: '上に音を重ねやすい、はっきりしたビート',
+    detailJa: '電子音。一定のビートに、右手でメロディーを重ねられます。',
+    firstMoveJa: '右手側のキーを8〜24回打ってみてください',
   },
   {
     id: 'warm-keys',
@@ -42,6 +60,10 @@ export const STARTER_KITS = [
     settings: { soundSet: 'piano', bpm: 96, complexity: 30, quantize: 'LIGHT' },
     foundation: 'ambient',
     firstMove: 'Play a few notes, then stop and let them ring',
+    nameJa: 'ウォーム・キーズ',
+    taglineJa: 'ピアノと、音が呼吸する余白',
+    detailJa: '音は自然に小さくなります。キーを打たない時間も音楽になります。',
+    firstMoveJa: '数音だけ弾き、止まって余韻を聴いてください',
   },
   {
     id: 'wood-and-wire',
@@ -52,6 +74,10 @@ export const STARTER_KITS = [
     settings: { soundSet: 'plucked', bpm: 108, complexity: 35, quantize: 'STRONG' },
     foundation: 'pulse',
     firstMove: 'Repeat a short pattern — j k l, j k l',
+    nameJa: 'ウッド＆ワイヤー',
+    taglineJa: '短く、弦らしく、繰り返しやすい音',
+    detailJa: '同じ3キーを繰り返すような、小さなフレーズに向いています。',
+    firstMoveJa: 'J・K・L、J・K・Lのように短い型を繰り返してください',
   },
   {
     id: 'empty-canvas',
@@ -62,6 +88,10 @@ export const STARTER_KITS = [
     settings: { soundSet: 'electronic', bpm: 110, complexity: 40, quantize: 'OFF' },
     foundation: null,
     firstMove: 'Type anything at all',
+    nameJa: '空のキャンバス',
+    taglineJa: 'あなたのタイピングだけ',
+    detailJa: '土台もタイミング補正もありません。すべてがあなたの打鍵です。',
+    firstMoveJa: 'まずは自由に何か打ってみてください',
   },
 ];
 

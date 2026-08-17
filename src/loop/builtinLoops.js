@@ -53,6 +53,29 @@ function tone(step16, zone, degree, octave, velocity, dur, extra = {}) {
 }
 
 export const BUILTIN_LOOPS = {
+  // An original slow-room sketch: no borrowed melody and no sampled audio.
+  // It deliberately occupies one track so the player still has three empty
+  // tracks in which to write the piece themselves.
+  dusk: {
+    label: 'Dusk Foundation',
+    bars: 4,
+    build: () => [
+      hit(0, 'kick', 72, { fx: { delay: 0.03, reverb: 0.18, drive: 0.08, feedback: 0.12 } }),
+      hit(8, 'snare', 48, { fx: { delay: 0.08, reverb: 0.38, drive: 0.04, feedback: 0.18 } }),
+      hit(16, 'kick', 66), hit(24, 'snare', 45),
+      hit(32, 'kick', 72), hit(40, 'snare', 48),
+      hit(48, 'kick', 64), hit(56, 'snare', 43),
+      hit(6, 'hat', 22), hit(14, 'hat', 18), hit(22, 'hat', 20), hit(30, 'hat', 17),
+      hit(38, 'hat', 22), hit(46, 'hat', 18), hit(54, 'hat', 20), hit(62, 'hat', 16),
+      tone(0, 'chord', 0, -1, 54, 2.3, { chordDegrees: [0, 2, 4], fx: { delay: 0.18, reverb: 0.55, drive: 0.03, feedback: 0.24 } }),
+      tone(16, 'chord', 4, -1, 48, 2.3, { chordDegrees: [4, 6, 8], fx: { delay: 0.18, reverb: 0.55, drive: 0.03, feedback: 0.24 } }),
+      tone(32, 'chord', 1, -1, 52, 2.3, { chordDegrees: [1, 3, 5], fx: { delay: 0.18, reverb: 0.55, drive: 0.03, feedback: 0.24 } }),
+      tone(48, 'chord', 3, -1, 46, 2.3, { chordDegrees: [3, 5, 7], fx: { delay: 0.18, reverb: 0.55, drive: 0.03, feedback: 0.24 } }),
+      tone(0, 'bass', 0, -2, 62, 0.9), tone(16, 'bass', 4, -2, 56, 0.9),
+      tone(32, 'bass', 1, -2, 60, 0.9), tone(48, 'bass', 3, -2, 54, 0.9),
+      tone(12, 'bell', 2, 1, 25, 0.7), tone(44, 'bell', 4, 1, 22, 0.7),
+    ],
+  },
   beat: {
     label: 'Beat',
     bars: 1,

@@ -1,4 +1,4 @@
-# TYPING INSTRUMENT  ·  v0.3 Creator Alpha
+# TYPING INSTRUMENT  ·  v0.3.1 Creator Alpha
 
 **Typing is the instrument.**
 
@@ -33,6 +33,11 @@ music for you. It is an instrument you get better at.
 and **Plucked** sound worlds that decay by themselves · the Story Strip ·
 starter kits and a guided first session · undo for every destructive action ·
 a rebuilt interface.
+
+**New in v0.3.1:** Japanese/English UI switching and **DUSK PIANO**, an
+original downtempo starter with restrained piano, a dusty beat and three empty
+tracks left for the player. UI language is a local preference only: it never
+enters the session log and cannot change replay output.
 
 ---
 

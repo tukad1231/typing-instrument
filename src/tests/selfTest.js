@@ -1853,7 +1853,7 @@ export function runSelfTests(app) {
     // and applying one really does what it says, on a fixture
     const fx = createFixture({ mapping });
     fx.at(1.0);
-    const warm = STARTER_KITS.find((k) => k.settings.soundSet === 'piano');
+    const warm = STARTER_KITS.find((k) => k.id === 'warm-keys');
     for (const ev of planKitEvents(warm, { hasFreeTrack: true })) fx.session.dispatch(ev.type, ev.data);
     const applied =
       fx.settings.soundSet === 'piano' &&

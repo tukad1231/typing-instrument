@@ -146,6 +146,21 @@ body {
   min-height: 100vh;
 }
 
+.lang-switch {
+  position: absolute;
+  top: var(--s4);
+  right: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 13px;
+  color: var(--ink-2);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.lang-switch:hover { color: var(--ink); border-color: var(--ink-3); }
+.home-head { position: relative; }
+
 h1, h2, h3 { margin: 0; font-weight: 620; letter-spacing: -.01em; }
 h2 { font-size: var(--fs-md); }
 h3 { font-size: var(--fs-sm); color: var(--ink-2); margin-top: var(--s4); }

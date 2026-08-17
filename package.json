@@ -1,6 +1,6 @@
 {
   "name": "typing-instrument",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "A local-first loop composer that turns touch-typing into a playable, re-performable instrument.",
   "type": "module",

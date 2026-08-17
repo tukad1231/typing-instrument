@@ -50,6 +50,7 @@ import {
 } from './story/storyStrip.js';
 import { renderTracks, buildTimeline, VolumeDrag } from './ui/tracksView.js';
 import { el, setChildren, $ } from './ui/dom.js';
+import { getLocale, setLocale, tr, localField, localizeDocument } from './ui/i18n.js';
 
 mark('M02', 'IMPORTS_READY');
 
@@ -113,6 +114,7 @@ let guidedOpen = false;
 const moves = new NextMoveMemory();
 
 const PRESETS = [
+  ['dusk', 'Dusk'],
   ['beat', 'Beat'],
   ['minimal', 'Minimal'],
   ['bass', 'Bass'],
@@ -282,6 +284,30 @@ function setStage(s) {
   node.hidden = !s;
 }
 
+// Language changes UI copy only. It dispatches no session event and therefore
+// cannot alter a project, a replay or the deterministic performance stream.
+function applyLanguage(next = getLocale()) {
+  const groupWasIdle = ['ready', '準備完了'].includes($('cGroup').textContent);
+  setLocale(next);
+  localizeDocument();
+  const switchLabel = getLocale() === 'ja' ? 'English' : '日本語';
+  $('langBtnHome').textContent = switchLabel;
+  $('langBtn').textContent = switchLabel;
+  if (!$('newBtn').disabled) $('newBtn').textContent = tr('NEW PIECE', '新しい曲を作る');
+  $('stopBtn').textContent = transportRunning ? tr('■ Stop', '■ 停止') : tr('▶ Play', '▶ 再生');
+  $('recBtn').textContent = recorder.recording ? tr('● Capturing', '● 録音中') : tr('● Capture', '● 録音');
+  $('replayBtn').textContent = replaying ? tr('■ Stop replay', '■ リプレイ停止') : tr('▶ Replay', '▶ リプレイ');
+  $('viewBtn').textContent = document.body.classList.contains('perform') ? tr('Exit perform', '演奏画面を終了') : tr('Perform', '演奏画面');
+  if (groupWasIdle) $('cGroup').textContent = tr('ready', '準備完了');
+  adviceKey = '';
+  if (started) renderAll();
+  if (!$('kitPicker').hidden) openKitPicker();
+  refreshLibrary().catch(() => {});
+}
+
+$('langBtnHome').onclick = () => applyLanguage(getLocale() === 'ja' ? 'en' : 'ja');
+$('langBtn').onclick = () => applyLanguage(getLocale() === 'ja' ? 'en' : 'ja');
+
 function bootFailed(err) {
   console.error(err);
   mark('B02', 'BOOT_FAILED', 'NG');
@@ -346,21 +372,21 @@ function summaryLine(s) {
   const st = s.stats || {};
   const bits = [
     when(s.updatedAt),
-    `${st.tracks || 0} track${st.tracks === 1 ? '' : 's'}`,
-    st.loopSeconds ? `${Math.round(st.loopSeconds)}s loop` : null,
+    getLocale() === 'ja' ? `${st.tracks || 0}トラック` : `${st.tracks || 0} track${st.tracks === 1 ? '' : 's'}`,
+    st.loopSeconds ? (getLocale() === 'ja' ? `${Math.round(st.loopSeconds)}秒ループ` : `${Math.round(st.loopSeconds)}s loop`) : null,
     (SOUND_SETS[s.soundSet] && SOUND_SETS[s.soundSet].label) || s.soundSet,
   ];
   return bits.filter(Boolean).join(' · ');
 }
 
 function when(iso) {
-  if (!iso) return 'never';
+  if (!iso) return tr('never', '保存なし');
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return 'unknown';
+  if (Number.isNaN(d.getTime())) return tr('unknown', '不明');
   const mins = Math.floor((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return mins + ' min ago';
-  if (mins < 60 * 24) return Math.floor(mins / 60) + ' h ago';
+  if (mins < 1) return tr('just now', 'たった今');
+  if (mins < 60) return getLocale() === 'ja' ? mins + '分前' : mins + ' min ago';
+  if (mins < 60 * 24) return getLocale() === 'ja' ? Math.floor(mins / 60) + '時間前' : Math.floor(mins / 60) + ' h ago';
   const p = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
@@ -373,9 +399,9 @@ function recentRow(s, titles) {
       el('span', { className: 'recent-meta', text: summaryLine(s) }),
     ]),
     el('div', { className: 'recent-btns' }, [
-      el('button', { className: 'chip ghost', type: 'button', text: 'Rename', onclick: () => renameFromLibrary(s) }),
-      el('button', { className: 'chip ghost', type: 'button', text: 'Duplicate', onclick: () => duplicateFromLibrary(s, titles) }),
-      el('button', { className: 'chip ghost', type: 'button', text: 'Delete', onclick: () => deleteFromLibrary(s) }),
+      el('button', { className: 'chip ghost', type: 'button', text: tr('Rename', '名前変更'), onclick: () => renameFromLibrary(s) }),
+      el('button', { className: 'chip ghost', type: 'button', text: tr('Duplicate', '複製'), onclick: () => duplicateFromLibrary(s, titles) }),
+      el('button', { className: 'chip ghost', type: 'button', text: tr('Delete', '削除'), onclick: () => deleteFromLibrary(s) }),
     ]),
   ]);
 }
@@ -731,7 +757,7 @@ window.addEventListener('pagehide', () => {
 function startTransport() {
   transportRunning = true;
   loop.start();
-  $('stopBtn').textContent = '■ Stop';
+  $('stopBtn').textContent = tr('■ Stop', '■ 停止');
 }
 
 /**
@@ -748,7 +774,7 @@ function stopTransport() {
   loop.stop();
   releaseHeldKeys('stop');
   sound.allNotesOff();
-  $('stopBtn').textContent = '▶ Play';
+  $('stopBtn').textContent = tr('▶ Play', '▶ 再生');
 }
 
 $('stopBtn').onclick = () => {
@@ -765,7 +791,7 @@ $('stopBtn').onclick = () => {
 function renderAll() {
   if (!started) return;
   const view = loop.composerSnapshot();
-  renderTracks($('tracks'), view, trackHandlers, { composing, drag, presets: PRESETS });
+  renderTracks($('tracks'), view, trackHandlers, { composing, drag, presets: PRESETS, locale: getLocale() });
   if (drag.active) { renderCompose(view); return; }
   renderStory(view);
   renderCompose(view);
@@ -839,8 +865,8 @@ function renderStory(view) {
         className: 'story-empty',
         text:
           view.totals.filled < 2
-            ? 'Make a second loop, then this is where you shape them into a song.'
-            : 'Save the mix you have now as a section, or let it suggest a shape.',
+            ? tr('Make a second loop, then this is where you shape them into a song.', '2つ目のループを作ると、ここで曲の展開を組み立てられます。')
+            : tr('Save the mix you have now as a section, or let it suggest a shape.', '現在のミックスをセクションに保存するか、曲の構成を提案させます。'),
       }),
     ]);
   } else {
@@ -861,13 +887,13 @@ function renderStory(view) {
               className: 'sc-meta',
               // Words, not just a border colour: "PLAYING" is readable when the
               // colour is not.
-              text: (playing ? 'PLAYING · ' : '') + sectionWeight(s) + '/' + view.totals.filled,
+              text: (playing ? tr('PLAYING · ', '再生中 · ') : '') + sectionWeight(s) + '/' + view.totals.filled,
             }),
           ]),
           el('div', { className: 'section-tools' }, [
-            el('button', { type: 'button', text: 'save', title: 'Overwrite with the current mix', onclick: () => saveMix(s.id) }),
-            el('button', { type: 'button', text: 'name', title: 'Rename', onclick: () => renameSectionPrompt(s.id) }),
-            el('button', { type: 'button', text: 'copy', title: 'Duplicate', onclick: () => editSections(duplicateSection(sections, s.id), 'Duplicated') }),
+            el('button', { type: 'button', text: tr('save', '保存'), title: tr('Overwrite with the current mix', '現在のミックスで上書き'), onclick: () => saveMix(s.id) }),
+            el('button', { type: 'button', text: tr('name', '名前'), title: tr('Rename', '名前変更'), onclick: () => renameSectionPrompt(s.id) }),
+            el('button', { type: 'button', text: tr('copy', '複製'), title: tr('Duplicate', '複製'), onclick: () => editSections(duplicateSection(sections, s.id), tr('Duplicated', '複製しました')) }),
             el('button', { type: 'button', text: '‹', title: 'Move earlier', onclick: () => editSections(moveSection(sections, s.id, -1), null) }),
             el('button', { type: 'button', text: '›', title: 'Move later', onclick: () => editSections(moveSection(sections, s.id, 1), null) }),
             el('button', { type: 'button', text: '×', title: 'Delete section', onclick: () => deleteSection(s.id) }),
@@ -879,7 +905,7 @@ function renderStory(view) {
   $('storyAddBtn').disabled = view.totals.filled === 0;
   $('storyProposeBtn').hidden = sections.length > 0 || view.totals.filled < 2;
   $('storyHint').textContent = sections.length
-    ? 'In Perform view these become big buttons.'
+    ? tr('In Perform view these become big buttons.', '演奏画面では、セクションが大きな切替ボタンになります。')
     : '';
 }
 
@@ -942,12 +968,12 @@ $('storyProposeBtn').onclick = () => {
 function renderProgress(view) {
   const secs = loop.loopSeconds();
   setChildren($('progressBody'), [
-    stat(String(view.totals.filled) + ' / ' + view.layerCount, 'tracks'),
-    stat(String(sections.length), 'sections'),
-    stat(secs ? secs.toFixed(1) + 's' : '—', 'loop length'),
-    stat(String(view.totals.notes), 'notes in loops'),
-    stat(String(session.events.length), 'performance events'),
-    stat(capturedOnce ? (dirtySinceCapture ? 'stale' : 'yes') : 'not yet', 'captured'),
+    stat(String(view.totals.filled) + ' / ' + view.layerCount, tr('tracks', 'トラック')),
+    stat(String(sections.length), tr('sections', 'セクション')),
+    stat(secs ? secs.toFixed(1) + tr('s', '秒') : '—', tr('loop length', 'ループの長さ')),
+    stat(String(view.totals.notes), tr('notes in loops', 'ループ内の音')),
+    stat(String(session.events.length), tr('performance events', '演奏イベント')),
+    stat(capturedOnce ? (dirtySinceCapture ? tr('stale', '要再録音') : tr('yes', 'あり')) : tr('not yet', '未録音'), tr('captured', '録音')),
   ]);
 }
 
@@ -974,9 +1000,27 @@ function renderNextMove(c) {
   const box = $('nextStep');
   if (!move) { box.hidden = true; return; }
   box.hidden = false;
-  $('nextStepText').textContent = move.text;
-  $('nextStepHint').textContent = move.hint;
+  const ja = NEXT_MOVE_JA[move.id];
+  $('nextStepText').textContent = getLocale() === 'ja' && ja
+    ? (typeof ja.text === 'function' ? ja.text(c) : ja.text)
+    : move.text;
+  $('nextStepHint').textContent = getLocale() === 'ja' && ja ? ja.hint : move.hint;
 }
+
+const NEXT_MOVE_JA = {
+  'type-first': { text: '短いフレーズを弾いてください', hint: 'まずは8〜24回ほど、自由にキーを打ちます。' },
+  'loop-it': { text: (c) => `Enterで${c.pending}音をループにします`, hint: '1つのトラックになり、繰り返し始めます。' },
+  'keep-typing': { text: 'もう少しだけ続けてください', hint: '覚えられるループにするには、あと数音あると効果的です。' },
+  contrast: { text: '対照的なレイヤーを1つ追加', hint: '低く、少なく、または反対の手で、違う役割を作ります。' },
+  'try-a-sound': { text: '別の音色を試す', hint: 'ピアノと弦は自然に減衰するので、同じ打鍵でも違う演奏になります。' },
+  'make-sections': { text: '曲をセクションに分ける', hint: '今のミックスと、音数を減らしたミックスを保存してみます。' },
+  'quiet-section': { text: '静かなセクションを作る', hint: '一度音を減らすと、全トラックが戻ったときに意味が生まれます。' },
+  'save-version': { text: '変更前の版を保存', hint: '曲を複製して、コピー側で実験できます。' },
+  capture: { text: '演奏を録音する', hint: '録音は打鍵、セクション切替、すべての操作を残します。' },
+  recapture: { text: '変更後の演奏をもう一度録音', hint: '最後の録音より曲が更新されています。' },
+  'all-muted': { text: '音が出るトラックがありません', hint: 'トラックのONまたはミュートを確認してください。' },
+  export: { text: '書き出す、またはさらに作り込む', hint: '音声と演奏ログをZIPに保存できます。' },
+};
 
 $('nextStepClose').onclick = () => {
   moves.dismiss(Date.now() / 1000);
@@ -1017,13 +1061,13 @@ function renderGuided(c) {
     return;
   }
   $('guidedStep').textContent = cur.index + 1 + ' / ' + cur.total;
-  $('guidedTitle').textContent = cur.step.title;
-  $('guidedBody').textContent = cur.step.body;
+  $('guidedTitle').textContent = localField(cur.step, 'title');
+  $('guidedBody').textContent = localField(cur.step, 'body');
   // The only affordance a step ever offers is the thing the step is about.
   const extra = [];
-  if (cur.step.id === 'sound') extra.push(el('button', { className: 'chip', type: 'button', text: 'Choose a sound', onclick: () => openKitPicker() }));
-  if (cur.step.id === 'shape') extra.push(el('button', { className: 'chip', type: 'button', text: 'Suggest a shape', onclick: () => $('storyProposeBtn').click() }));
-  if (cur.step.id === 'capture') extra.push(el('button', { className: 'chip', type: 'button', text: 'Capture', onclick: () => $('recBtn').click() }));
+  if (cur.step.id === 'sound') extra.push(el('button', { className: 'chip', type: 'button', text: tr('Choose a sound', 'サウンドを選ぶ'), onclick: () => openKitPicker() }));
+  if (cur.step.id === 'shape') extra.push(el('button', { className: 'chip', type: 'button', text: tr('Suggest a shape', '曲の構成を提案'), onclick: () => $('storyProposeBtn').click() }));
+  if (cur.step.id === 'capture') extra.push(el('button', { className: 'chip', type: 'button', text: tr('Capture', '録音'), onclick: () => $('recBtn').click() }));
   setChildren($('guidedExtra'), extra);
 }
 
@@ -1043,9 +1087,9 @@ function openKitPicker() {
     host,
     STARTER_KITS.map((k) =>
       el('button', { className: 'kit ' + k.accent, type: 'button', onclick: () => applyKit(k.id) }, [
-        el('span', { className: 'kit-name', text: k.name }),
-        el('span', { className: 'kit-tag', text: k.tagline }),
-        el('span', { className: 'kit-detail', text: k.detail + ' · ' + k.settings.bpm + ' bpm' }),
+        el('span', { className: 'kit-name', text: localField(k, 'name') }),
+        el('span', { className: 'kit-tag', text: localField(k, 'tagline') }),
+        el('span', { className: 'kit-detail', text: localField(k, 'detail') + ' · ' + k.settings.bpm + ' bpm' }),
       ])
     )
   );
@@ -1063,7 +1107,7 @@ function applyKit(id) {
   $('kitPicker').hidden = true;
   project.markDirty('kit');
   renderAll();
-  toast(kit.name + ' — ' + kit.firstMove);
+  toast(localField(kit, 'name') + ' — ' + localField(kit, 'firstMove'));
   textEl.focus();
 }
 
@@ -1101,13 +1145,18 @@ function renderCompose(view) {
   $('commitBtn').disabled = !canCommit(v);
   if (!composing) return;
   const target = v.nextFreeLayer;
-  $('composeTarget').textContent = target === null ? 'no free track' : 'TRACK ' + (target + 1);
+  $('composeTarget').textContent = target === null ? tr('no free track', '空きトラックなし') : tr('TRACK ', 'トラック ') + (target + 1);
   $('pendingCount').textContent = v.pending.count;
-  $('pendingBars').textContent = v.pending.bars ? v.pending.bars + ' bar' + (v.pending.bars > 1 ? 's' : '') : '—';
+  $('pendingBars').textContent = v.pending.bars
+    ? (getLocale() === 'ja' ? v.pending.bars + ' 小節' : v.pending.bars + ' bar' + (v.pending.bars > 1 ? 's' : ''))
+    : '—';
   const can = canCommit(v);
   // Saying WHY it is unavailable is the whole point of disabling it.
   $('composeWhy').textContent = can
-    ? 'Closing does not throw anything away. What you already played stays waiting, and the next Enter will still turn it into a loop.'
+    ? tr(
+        'Closing does not throw anything away. What you already played stays waiting, and the next Enter will still turn it into a loop.',
+        '閉じても音は消えません。すでに弾いた音は待機し、次に Enter を押すとループになります。'
+      )
     : commitBlockedReason(v);
 }
 
@@ -1225,7 +1274,7 @@ document.addEventListener('keydown', (e) => {
 
 $('viewBtn').onclick = () => {
   const on = document.body.classList.toggle('perform');
-  $('viewBtn').textContent = on ? 'Exit perform' : 'Perform';
+  $('viewBtn').textContent = on ? tr('Exit perform', '演奏画面を終了') : tr('Perform', '演奏画面');
   if (on) { toggleInspector(false); closeSheet(); }
   textEl.focus();
 };
@@ -1253,7 +1302,7 @@ $('recBtn').onclick = () => {
   recorder.startAudio(sound.recordDest.stream, sound.now(), textEl.value);
   session.beginTake(sessionCheckpoint());
   $('recBtn').classList.add('on');
-  $('recBtn').textContent = '● Capturing';
+  $('recBtn').textContent = tr('● Capturing', '● 録音中');
   $('clearBtn').disabled = true;
   toast('Capturing — your typing AND every control you touch is the take');
   textEl.focus();
@@ -1264,7 +1313,7 @@ async function stopTake() {
   session.endTake();
   await recorder.stopAudio(sound.now(), textEl.value);
   $('recBtn').classList.remove('on');
-  $('recBtn').textContent = '● Capture';
+  $('recBtn').textContent = tr('● Capture', '● 録音');
   $('clearBtn').disabled = false;
   capturedOnce = true;
   dirtySinceCapture = false;
@@ -1388,7 +1437,7 @@ function startReplay() {
 
   releaseHeldKeys('replay start');
   replaying = true;
-  $('replayBtn').textContent = '■ Stop replay';
+  $('replayBtn').textContent = tr('■ Stop replay', '■ リプレイ停止');
   sound.allNotesOff();
   eventsBySeq.clear();
   textEl.readOnly = true;
@@ -1420,7 +1469,7 @@ function stopReplay(finished) {
   // A replay that is stopped halfway has notes in flight. They belong to a
   // performance that is no longer happening.
   sound.allNotesOff();
-  $('replayBtn').textContent = '▶ Replay';
+  $('replayBtn').textContent = tr('▶ Replay', '▶ リプレイ');
   $('stopBtn').textContent = transportRunning ? '■ Stop' : '▶ Play';
   toast(finished ? 'Replay finished — the whole set was rebuilt from the log' : 'Replay stopped');
   renderAll();
@@ -1490,8 +1539,12 @@ function paint() {
 function paintCurrent(ev) {
   const m = mapping[ev.code];
   $('cKey').textContent = (ev.char || ev.code).replace(' ', 'SPACE');
-  $('cHand').textContent = ev.hand;
-  $('cGroup').textContent = m ? ZONES[m.zone].label + (m.part ? ' / ' + m.part : '') : '—';
+  const handJa = { left: '左', right: '右', both: '両手' };
+  const zoneJa = { bass: 'ベース', drum: 'ドラム', lowfx: '低音FX', bell: 'ベル', melody: 'メロディー', voice: 'ボイス', chord: 'コード', transport: '操作' };
+  $('cHand').textContent = getLocale() === 'ja' ? (handJa[ev.hand] || ev.hand) : ev.hand;
+  $('cGroup').textContent = m
+    ? (getLocale() === 'ja' ? (zoneJa[m.zone] || ZONES[m.zone].label) : ZONES[m.zone].label) + (m.part ? ' / ' + m.part : '')
+    : '—';
   // The phrase is arbitrary user text and is clipped to one line, so the full
   // value lives on the title attribute.
   const phrase = ev.word || '—';
@@ -1509,14 +1562,18 @@ function paintSaveState(state, info) {
   const node = $('saveState');
   if (!node) return;
   node.className = 'savestate ' + state;
-  const text = {
-    [SAVE_STATE.IDLE]: '',
-    [SAVE_STATE.DIRTY]: 'Unsaved',
-    [SAVE_STATE.SAVING]: 'Saving…',
-    [SAVE_STATE.SAVED]: 'Saved',
-    [SAVE_STATE.FAILED]: 'Save failed',
-    [SAVE_STATE.UNAVAILABLE]: 'Not saved here',
-  }[state] || '';
+  const labels = getLocale() === 'ja'
+    ? {
+        [SAVE_STATE.IDLE]: '', [SAVE_STATE.DIRTY]: '未保存', [SAVE_STATE.SAVING]: '保存中…',
+        [SAVE_STATE.SAVED]: '保存済み', [SAVE_STATE.FAILED]: '保存失敗',
+        [SAVE_STATE.UNAVAILABLE]: 'このブラウザでは保存不可',
+      }
+    : {
+        [SAVE_STATE.IDLE]: '', [SAVE_STATE.DIRTY]: 'Unsaved', [SAVE_STATE.SAVING]: 'Saving…',
+        [SAVE_STATE.SAVED]: 'Saved', [SAVE_STATE.FAILED]: 'Save failed',
+        [SAVE_STATE.UNAVAILABLE]: 'Not saved here',
+      };
+  const text = labels[state] || '';
   node.textContent = text;
   node.title = info && info.message ? info.message : '';
   const bad = state === SAVE_STATE.FAILED || state === SAVE_STATE.UNAVAILABLE;
@@ -1663,6 +1720,7 @@ setInterval(() => { if (devMode && !$('debug').hidden && debugView === 'events')
 // ---------------------------------------------------------------------------
 detectDevMode();
 buildSoundPicker();
+applyLanguage(getLocale());
 
 $('newBtn').addEventListener('click', startNewPiece);
 mark('M03', 'HANDLER_ATTACHED');
@@ -1670,7 +1728,7 @@ mark('M03', 'HANDLER_ATTACHED');
 window.__typingReady = true;
 
 $('newBtn').disabled = false;
-$('newBtn').textContent = 'NEW PIECE';
+$('newBtn').textContent = tr('NEW PIECE', '新しい曲を作る');
 $('openFileBtn').disabled = false;
 
 refreshLibrary()
