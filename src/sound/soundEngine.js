@@ -35,6 +35,26 @@ import { SOUND_SETS } from './soundSets.js';
 const NOISE_SEED = 0x5eed1234;
 const IR_SEED = 0x0badc0de;
 
+/**
+ * How many voices may be alive at once.
+ *
+ * Four loops of eight notes plus a fast typist plus ratchets can ask for far
+ * more than a browser will render cleanly, and the failure mode is not a
+ * dropped note -- it is the whole output turning to mud and the tab locking up.
+ * The cap is enforced by DETERMINISTIC stealing: always the oldest still-alive
+ * voice, never "whichever we noticed first". Same events in, same voice
+ * surviving, every time.
+ */
+const MAX_POLYPHONY = 48;
+
+/** how long a gated voice is assumed to last, for the purpose of the cap */
+const ASSUMED_GATED_SECONDS = 8;
+
+/** a value that is safe to hand to an AudioParam */
+function safe(v, fallback) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : fallback;
+}
+
 export class SoundEngine {
   constructor(opts = {}) {
     this.ctx = null;
@@ -42,6 +62,11 @@ export class SoundEngine {
     this.gated = new Map();
     this.space = 0;
     this.bpm = 120;
+    // Every live voice, oldest first. See MAX_POLYPHONY.
+    this.voices = [];
+    this.voiceCounter = 0;
+    this.maxPolyphony = opts.maxPolyphony || MAX_POLYPHONY;
+    this.stolen = 0; // diagnostic; the self-test reads it
     // Injectable so the release-identity logic can be tested with a fake clock
     // instead of by waiting 4.2 real seconds and making noise.
     this._setTimeout = opts.setTimeout || ((fn, ms) => setTimeout(fn, ms));
@@ -92,10 +117,21 @@ export class SoundEngine {
     this.comp.attack.value = 0.004;
     this.comp.release.value = 0.16;
 
+    // A second, much harder stage that exists only to make it impossible to
+    // send a damaging peak to the headphones. `comp` above is a musical
+    // compressor and is allowed to be gentle; this one is a brick wall. Two
+    // separate jobs, so two separate nodes.
+    this.limiter = ctx.createDynamicsCompressor();
+    this.limiter.threshold.value = -1.5;
+    this.limiter.knee.value = 0;
+    this.limiter.ratio.value = 20;
+    this.limiter.attack.value = 0.001;
+    this.limiter.release.value = 0.08;
+
     this.out = ctx.createGain();
     this.out.gain.value = 0.85;
 
-    this.master.connect(this.shaper).connect(this.comp).connect(this.out);
+    this.master.connect(this.shaper).connect(this.comp).connect(this.limiter).connect(this.out);
     this.out.connect(ctx.destination);
 
     // recording tap
@@ -126,6 +162,14 @@ export class SoundEngine {
     this.liveBus.gain.value = 1;
     this.liveBus.connect(this.master);
 
+    // Auditioning a Sound World is NOT part of the performance. It gets its own
+    // bus so it can be silenced in one move, and nothing on it is ever
+    // dispatched, recorded or counted against the polyphony budget of the
+    // piece. See playPreview().
+    this.previewBus = ctx.createGain();
+    this.previewBus.gain.value = 0.9;
+    this.previewBus.connect(this.master);
+
     return ctx;
   }
 
@@ -145,6 +189,9 @@ export class SoundEngine {
     if (!SOUND_SETS[name]) return;
     this.setName = name;
     if (!this.ctx) return;
+    // An audition of the world being left behind must not carry into the one
+    // being chosen.
+    this.stopPreview();
     this.shaper.curve = makeCurve(this.set.drive);
     this.reverb.buffer = makeImpulse(this.ctx, this.set.reverbSeconds, IR_SEED);
     this.setBpm(this.bpm);
@@ -178,40 +225,169 @@ export class SoundEngine {
    * @param {string} scope key namespace for gated note-off
    */
   play(ev, when, bus = null, scope = 'live') {
-    if (!this.ctx) return;
+    if (!this.ctx) return null;
     const ctx = this.ctx;
     const dest = bus || this.liveBus;
-    const t = Math.max(when + this.t0, ctx.currentTime + 0.001);
+    const t = Math.max(safe(when, 0) + this.t0, ctx.currentTime + 0.001);
 
     const amp = ctx.createGain();
-    amp.gain.value = Math.pow(clamp(ev.velocity, 0, 127) / 127, 1.5);
+    // Every AudioParam below goes through safe(): one NaN reaching a param
+    // poisons that node for the rest of the session (Web Audio has no way to
+    // recover a param that was set to NaN), and a burst of very fast typing is
+    // exactly where a divide-by-zero in an interval would show up.
+    amp.gain.value = Math.pow(clamp(safe(ev.velocity, 90), 0, 127) / 127, 1.5);
 
     const pan = ctx.createStereoPanner();
-    pan.pan.value = clamp(ev.pan || 0, -1, 1);
+    pan.pan.value = clamp(safe(ev.pan, 0), -1, 1);
     amp.connect(pan);
     pan.connect(dest);
 
     const fx = ev.fx || {};
-    if (fx.delay > 0.001) {
+    const fxDelay = safe(fx.delay, 0);
+    if (fxDelay > 0.001) {
       const g = ctx.createGain();
-      g.gain.value = fx.delay;
+      g.gain.value = clamp(fxDelay, 0, 1);
       pan.connect(g).connect(this.delayIn);
     }
-    const rv = clamp((fx.reverb || 0) + this.space * 0.45, 0, 1);
+    const rv = clamp(safe(fx.reverb, 0) + this.space * 0.45, 0, 1);
     if (rv > 0.001) {
       const g = ctx.createGain();
       g.gain.value = rv;
       pan.connect(g).connect(this.reverbIn);
     }
     if (fx.feedback !== undefined) {
-      this.delayFb.gain.setTargetAtTime(clamp(fx.feedback + this.space * 0.25, 0, 0.7), t, 0.1);
+      this.delayFb.gain.setTargetAtTime(clamp(safe(fx.feedback, 0.2) + this.space * 0.25, 0, 0.7), t, 0.1);
     }
 
+    // Book the slot BEFORE building the voice, so an over-budget burst steals
+    // from what is already sounding rather than adding to it first.
+    const slot = this._takeVoiceSlot(t, ev);
     const handle = this._voice(ev, t, amp);
+    slot.amp = amp;
+    slot.handle = handle;
+    if (handle && Number.isFinite(handle.naturalEnd)) {
+      slot.endsAt = Math.max(t + 0.01, handle.naturalEnd);
+    }
     if (ev.gated && handle && handle.release) {
-      this._registerGated(scope + ':' + ev.sourceSeq, handle);
+      slot.key = scope + ':' + ev.sourceSeq;
+      // so release() can retire the slot instead of leaving it booked for the
+      // full assumed lifetime of a held note
+      handle.slot = slot;
+      this._registerGated(slot.key, handle);
     }
     return handle;
+  }
+
+  /**
+   * Audition a Sound World without performing it.
+   *
+   * Routed to previewBus, never registered as a gated voice, never counted
+   * against polyphony, and -- crucially -- the caller does not dispatch
+   * anything, so nothing about it reaches the session log or the saved project.
+   * stopPreview() silences whatever is still ringing.
+   */
+  playPreview(ev, offsetSeconds = 0) {
+    if (!this.ctx) return null;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + 0.02 + Math.max(0, safe(offsetSeconds, 0));
+    const amp = ctx.createGain();
+    amp.gain.value = Math.pow(clamp(safe(ev.velocity, 90), 0, 127) / 127, 1.5);
+    amp.connect(this.previewBus);
+    this._previewAmps = this._previewAmps || [];
+    this._previewAmps.push(amp);
+    const handle = this._voice(Object.assign({}, ev, { gated: false }), t, amp);
+    return handle;
+  }
+
+  stopPreview() {
+    if (!this.ctx || !this._previewAmps) return 0;
+    const now = this.ctx.currentTime;
+    const n = this._previewAmps.length;
+    for (const amp of this._previewAmps) fadeOutAndDrop(amp, now, 0.04);
+    this._previewAmps = [];
+    return n;
+  }
+
+  // -------------------------------------------------------------------------
+  // POLYPHONY
+  // -------------------------------------------------------------------------
+  /**
+   * Reserve a voice slot, stealing the OLDEST live voice when the budget is
+   * full. "Oldest" means the smallest sequence number, which is a total order
+   * fixed by the events themselves -- so the same performance always steals the
+   * same voice, and the cap does not make the output non-deterministic in a way
+   * a listener could notice as randomness.
+   */
+  _takeVoiceSlot(t, ev) {
+    const now = this._audioNow();
+    // drop everything that has certainly finished
+    if (this.voices.length) this.voices = this.voices.filter((v) => v.endsAt > now);
+    while (this.voices.length >= this.maxPolyphony) {
+      const victim = this.voices.shift();
+      this.stolen++;
+      this._killVoice(victim, now);
+    }
+    const dur = safe(ev.duration, 0.3);
+    const endsAt = ev.gated ? t + ASSUMED_GATED_SECONDS : t + Math.max(dur, 0.05) + 2.0;
+    const slot = { n: this.voiceCounter++, endsAt, amp: null, handle: null, key: null };
+    this.voices.push(slot);
+    return slot;
+  }
+
+  _killVoice(slot, now) {
+    if (!slot) return;
+    if (slot.key && this.gated.get(slot.key) === slot.handle) {
+      this.gated.delete(slot.key);
+      if (slot.handle && slot.handle.timer != null) this._clearTimeout(slot.handle.timer);
+    }
+    try {
+      if (slot.handle && slot.handle.stop) slot.handle.stop(now);
+      else if (slot.handle && slot.handle.release) slot.handle.release(now);
+    } catch (e) {
+      /* a voice that cannot be released is still going to be faded out below */
+    }
+    if (slot.amp) fadeOutAndDrop(slot.amp, now, 0.02);
+  }
+
+  /**
+   * EVERYTHING off, right now.
+   *
+   * The safety net behind window blur, the tab going away, STOP, CLEAR ALL and
+   * switching to another project. A stuck note is the one failure a musical
+   * tool is not allowed to have: you cannot demonstrate it, you cannot record
+   * over it, and on a laptop you cannot even leave the room.
+   *
+   * @returns {number} how many voices were stopped -- the self-test asserts it
+   */
+  allNotesOff() {
+    if (!this.ctx) return 0;
+    const now = this._audioNow();
+    let n = 0;
+    for (const key of [...this.gated.keys()]) {
+      const h = this.gated.get(key);
+      this.gated.delete(key);
+      if (h && h.timer != null) this._clearTimeout(h.timer);
+      try {
+        if (h && h.release) h.release(now);
+      } catch (e) {
+        /* fall through to the fade below */
+      }
+      n++;
+    }
+    for (const slot of this.voices) {
+      if (slot.amp) fadeOutAndDrop(slot.amp, now, 0.03);
+      n++;
+    }
+    this.voices = [];
+    n += this.stopPreview();
+    return n;
+  }
+
+  /** live diagnostics for the inspector and the polyphony self-test */
+  voiceStats() {
+    const now = this._audioNow();
+    const live = this.voices.filter((v) => v.endsAt > now).length;
+    return { live, gated: this.gated.size, max: this.maxPolyphony, stolen: this.stolen };
   }
 
   _audioNow() {
@@ -250,7 +426,11 @@ export class SoundEngine {
     if (!h) return;
     this.gated.delete(key);
     if (h.timer != null) this._clearTimeout(h.timer); // 0 is a valid id
-    h.release(Math.max(when + this.t0, h.minEnd || 0));
+    const at = Math.max(safe(when, 0) + this.t0, h.minEnd || 0);
+    h.release(at);
+    // The slot was booked for ASSUMED_GATED_SECONDS because nobody knew how
+    // long the key would be down. Now we do, so give the budget back.
+    if (h.slot) h.slot.endsAt = Math.min(h.slot.endsAt, at + (h.dampTime || 1.0) + 0.2);
   }
 
   /** `scope` is a prefix: 'L2' releases every iteration of layer 2. */
@@ -263,17 +443,194 @@ export class SoundEngine {
   }
 
   // -------------------------------------------------------------------------
+  /**
+   * Pick the synthesis model.
+   *
+   * The ROLE of a key never changes -- J is always melody -- but a Sound World
+   * may decide that melody is a struck string rather than a held oscillator.
+   * Percussion, FX and bells are one-shots in EVERY world: they finish on their
+   * own schedule and never wait for a key to come up, which is why holding a
+   * drum key can never leave anything ringing.
+   */
   _voice(ev, t, amp) {
     const kind = ev.instrument;
     if (kind === 'drum' || kind === 'lowfx' || kind === 'fx') return this._perc(ev, t, amp);
+    if (kind === 'bell') return this._bell(ev, t, amp);
+
+    const model = this.set.model || 'gated';
+    if (model === 'piano' || model === 'pluck') {
+      // A chord still plays its three tones; each one is a struck string.
+      if (kind === 'chord') return this._struckChord(ev, t, amp, model);
+      return this._struck(ev, t, amp, model, kind);
+    }
+
     switch (kind) {
       case 'bass': return this._synth(ev, t, amp, this.set.bass, 0);
       case 'melody': return this._synth(ev, t, amp, this.set.melody, 0);
-      case 'bell': return this._bell(ev, t, amp);
       case 'chord': return this._chord(ev, t, amp);
       case 'voice': return this._voiceSynth(ev, t, amp);
       default: return this._synth(ev, t, amp, this.set.melody, 0);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // STRUCK / PLUCKED
+  //
+  // The contract these two share, and the reason they are one function:
+  //
+  //   * the loudest instant is the attack, and it decays from there;
+  //   * it keeps decaying WHILE THE KEY IS HELD -- holding does not sustain;
+  //   * releasing the key does not cut the sound off, it DAMPS it, over `damp`
+  //     seconds. High notes damp faster than low ones, exactly as the felt on a
+  //     real instrument does;
+  //   * the decay time depends on PITCH, not on one global figure.
+  //
+  // `duration` (how long the key was held) therefore still matters -- it decides
+  // when damping starts -- but it can never make a note sustain at a level it
+  // has already decayed past. That is the honest behaviour, and it is what makes
+  // phrasing rather than speed the way to play these two worlds well.
+  // -------------------------------------------------------------------------
+  _struckDecay(cfg, midi) {
+    // 36 (low C) .. 96 (top). Exponential between the two endpoints, so the
+    // middle of the keyboard lands where an ear expects it rather than halfway.
+    const m = clamp(safe(midi, 60), 24, 108);
+    const k = clamp((m - 36) / 60, 0, 1);
+    const lo = Math.max(0.2, cfg.decayLow);
+    const hi = Math.max(0.15, cfg.decayHigh);
+    return lo * Math.pow(hi / lo, k);
+  }
+
+  _struckDamp(cfg, midi) {
+    const m = clamp(safe(midi, 60), 24, 108);
+    const k = clamp((m - 36) / 60, 0, 1);
+    const lo = cfg.damp;
+    const hi = cfg.dampHigh === undefined ? cfg.damp * 0.4 : cfg.dampHigh;
+    return lo + (hi - lo) * k;
+  }
+
+  _struck(ev, t, amp, model, kind) {
+    const ctx = this.ctx;
+    const cfg = this.set.struck;
+    const freq = clamp(safe(ev.freq, 440), 20, 12000);
+    const midi = safe(ev.note, 60);
+    const isPluck = model === 'pluck';
+
+    const decay = this._struckDecay(cfg, midi) * (kind === 'bass' ? 1.35 : 1);
+    const damp = this._struckDamp(cfg, midi);
+    const attack = Math.max(cfg.attack || 0.003, 0.001);
+
+    // one gain for the whole note, so damping is a single ramp
+    const g = ctx.createGain();
+    const body = ctx.createBiquadFilter();
+    body.type = 'lowpass';
+    body.Q.value = isPluck ? 0.9 : 0.4;
+    const open = clamp(freq * (isPluck ? cfg.bodyOpen : 6.0), 200, cfg.cutoff || 6000);
+    const close = clamp(freq * (isPluck ? cfg.bodyClose : 2.2), 120, cfg.cutoff || 6000);
+    body.frequency.setValueAtTime(open, t);
+    body.frequency.exponentialRampToValueAtTime(Math.max(close, 60), t + Math.min(decay, 2.5));
+    body.connect(g).connect(amp);
+
+    // --- the partials -------------------------------------------------------
+    // Each one has its own decay: upper partials die first, which is what turns
+    // a bright attack into a round tail instead of a static timbre.
+    const oscs = [];
+    const partialGains = [];
+    let naturalEnd = t + attack + 0.06;
+    for (const [ratio, level, decayScale] of cfg.partials) {
+      const f = freq * ratio;
+      if (f > 18000) continue; // above hearing; do not waste a node on it
+      const o = ctx.createOscillator();
+      o.type = isPluck && ratio === 1 ? 'sawtooth' : 'sine';
+      o.frequency.value = f;
+      const pg = ctx.createGain();
+      const pDecay = Math.max(decay * decayScale, 0.06);
+      pg.gain.setValueAtTime(0.0001, t);
+      pg.gain.linearRampToValueAtTime(level, t + attack);
+      pg.gain.exponentialRampToValueAtTime(0.0001, t + attack + pDecay);
+      o.connect(pg).connect(body);
+      o.start(t);
+      o.stop(t + attack + pDecay + 0.05);
+      naturalEnd = Math.max(naturalEnd, t + attack + pDecay + 0.05);
+      oscs.push(o);
+      partialGains.push(pg);
+    }
+
+    // --- the excitation -----------------------------------------------------
+    // The hammer thud (piano) or the pick (plucked). Short, filtered noise read
+    // from the seeded buffer -- deterministic, and the same note always gets the
+    // same slice of it because the offset comes from the frequency.
+    const exciteLen = isPluck ? cfg.exciteSeconds || 0.009 : 0.02;
+    if (cfg.hammer > 0) {
+      const s = ctx.createBufferSource();
+      s.buffer = this.noiseBuf;
+      s.loop = true;
+      const off = (freq % 137) / 137 * 1.7; // deterministic, note-derived
+      s.start(t, off);
+      s.stop(t + exciteLen + 0.06);
+      const nf = ctx.createBiquadFilter();
+      nf.type = isPluck ? 'bandpass' : 'lowpass';
+      nf.frequency.value = clamp(freq * (isPluck ? 2.4 : 3.0), 120, 9000);
+      nf.Q.value = isPluck ? 1.1 : 0.7;
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(cfg.hammer, t);
+      ng.gain.exponentialRampToValueAtTime(0.0005, t + exciteLen + 0.03);
+      s.connect(nf).connect(ng).connect(body);
+    }
+
+    g.gain.setValueAtTime(1, t);
+
+    let damped = false;
+    const minEnd = t + Math.min(0.06, decay * 0.25);
+    const release = (when) => {
+      if (damped) return;
+      damped = true;
+      const r = Math.max(safe(when, 0), minEnd);
+      // Damping, not silencing: the string is stopped over `damp` seconds. The
+      // value is read from the curve first so the ramp starts wherever the note
+      // has already decayed to, instead of jumping back up to full.
+      g.gain.cancelScheduledValues(r);
+      g.gain.setValueAtTime(Math.max(g.gain.value, 0.0001), r);
+      g.gain.exponentialRampToValueAtTime(0.0001, r + damp);
+      for (const o of oscs) {
+        try {
+          o.stop(r + damp + 0.05);
+        } catch (e) {
+          /* already scheduled to stop earlier, which is fine */
+        }
+      }
+    };
+
+    // Even a one-shot returns its real lifetime and a stop handle. Without
+    // that metadata the polyphony ledger forgot a long low piano tail while
+    // its AudioNodes were still alive, so a nominal 48-voice cap was not a cap.
+    return { release, minEnd, stop: release, naturalDecay: decay, naturalEnd, dampTime: damp };
+  }
+
+  _struckChord(ev, t, amp, model) {
+    const notes = ev.chord && ev.chord.length ? ev.chord : [safe(ev.note, 60)];
+    const handles = notes.map((m, i) =>
+      this._struck(
+        Object.assign({}, ev, {
+          note: m,
+          freq: 440 * Math.pow(2, (m - 69) / 12),
+          // a real hand does not strike three keys at the same microsecond
+          velocity: clamp(safe(ev.velocity, 90) * (i === 0 ? 1 : 0.82), 1, 127),
+        }),
+        t + i * 0.006,
+        amp,
+        model,
+        'chord'
+      )
+    );
+    const live = handles.filter(Boolean);
+    if (!live.length) return null;
+    return {
+      release: (when) => live.forEach((h) => h.release(when)),
+      minEnd: Math.min(...live.map((h) => h.minEnd)),
+      stop: (when) => live.forEach((h) => h.release(when)),
+      naturalEnd: Math.max(...live.map((h) => h.naturalEnd || 0)),
+      dampTime: Math.max(...live.map((h) => h.dampTime || 0)),
+    };
   }
 
   _noiseSource(t, dur, playbackRate = 1) {
@@ -577,6 +934,32 @@ export class SoundEngine {
   }
 }
 
+/**
+ * Take a gain node down to silence and let go of it.
+ *
+ * Used by voice stealing and by allNotesOff. The 20-40 ms ramp is not
+ * politeness: cutting a gain to zero in one sample IS a click, and a click is
+ * exactly what a listener hears as "the software broke", so the fastest safe
+ * stop is still a short ramp. The disconnect is deferred past the ramp so the
+ * tail is actually rendered.
+ */
+function fadeOutAndDrop(amp, now, seconds) {
+  try {
+    amp.gain.cancelScheduledValues(now);
+    amp.gain.setValueAtTime(Math.max(amp.gain.value, 0.0001), now);
+    amp.gain.linearRampToValueAtTime(0, now + seconds);
+  } catch (e) {
+    /* a param that cannot be ramped is disconnected below anyway */
+  }
+  setTimeout(() => {
+    try {
+      amp.disconnect();
+    } catch (e) {
+      /* already gone */
+    }
+  }, Math.ceil(seconds * 1000) + 60);
+}
+
 // --- deterministic buffers ---------------------------------------------------
 function makeNoise(ctx, seconds, seed) {
   const len = Math.floor(ctx.sampleRate * seconds);
@@ -611,3 +994,5 @@ function makeCurve(amount) {
   }
   return c;
 }
+
+export { MAX_POLYPHONY, safe };

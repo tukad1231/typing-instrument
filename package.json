@@ -1,8 +1,8 @@
 {
   "name": "typing-instrument",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
-  "description": "Typing is the instrument. A PoC that turns touch-typing into a playable, re-performable instrument.",
+  "description": "A local-first loop composer that turns touch-typing into a playable, re-performable instrument.",
   "type": "module",
   "scripts": {
     "start": "node server.js --open",

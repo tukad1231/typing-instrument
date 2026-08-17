@@ -4,25 +4,56 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="google" content="notranslate" />
+    <meta name="color-scheme" content="dark light" />
     <title>TYPING INSTRUMENT</title>
     <link rel="stylesheet" href="./src/ui/styles.css" />
   </head>
-  <body class="simple">
-    <!-- ================= START GATE ================= -->
-    <div id="gate">
-      <div class="gate-box">
-        <h1>TYPING INSTRUMENT</h1>
-        <p class="sub">Your typing is the instrument. No music theory required.</p>
-        <!--
-          Starts disabled on purpose. src/main.js enables it only once its whole
-          module graph has loaded AND its click handler is attached, so a click
-          can never land in the gap between "page painted" and "code running".
-        -->
-        <button id="startBtn" class="big" type="button" disabled>LOADING…</button>
-        <p class="tiny">
-          headphones recommended &middot; then just type
+  <body class="boot">
+    <!-- ===================================================================
+         HOME
+         Also the audio start gate. Web Audio needs a user gesture before it
+         will make a sound, and the browser does not care WHICH gesture -- so
+         the gesture is "open a piece" rather than a separate START button in
+         front of it. One click gets you into music instead of two.
+         ==================================================================== -->
+    <div id="home">
+      <div class="home-inner">
+        <header class="home-head">
+          <h1>TYPING&nbsp;INSTRUMENT</h1>
+          <p class="sub">Your typing is the instrument. No music theory required.</p>
+        </header>
+
+        <!-- filled in by main.js when there is something to continue -->
+        <button id="continueBtn" class="continue-card" type="button" hidden>
+          <span class="cc-kicker">Continue where you left off</span>
+          <span class="cc-title" id="continueTitle"></span>
+          <span class="cc-meta" id="continueMeta"></span>
+        </button>
+
+        <div class="home-actions">
+          <!--
+            Ships disabled on purpose. main.js enables it only once its whole
+            module graph has loaded AND its click handler is attached, so a
+            click can never land in the gap between "page painted" and "code
+            running". That gap is what ate the first click in v0.1.
+          -->
+          <button id="newBtn" class="big primary" type="button" disabled>LOADING…</button>
+          <button id="openFileBtn" class="ghost big" type="button" disabled>Open a project file…</button>
+          <input id="importFile" type="file" accept=".json,application/json" hidden />
+        </div>
+
+        <section id="recent" hidden>
+          <h2>Recent pieces</h2>
+          <div id="recentList" class="recent-list"></div>
+        </section>
+
+        <p class="tiny home-note">
+          Headphones recommended. Everything you make stays on this computer — nothing is uploaded.
         </p>
+
+        <p id="storeWarn" class="warnline" hidden></p>
         <p id="bootStage" class="stage" hidden></p>
+
         <div id="bootErr" hidden>
           <h2 id="bootErrTitle"></h2>
           <p id="bootErrBody"></p>
@@ -30,6 +61,7 @@
           <pre id="bootLogView"></pre>
         </div>
       </div>
+      <div id="homeToast" class="toast" hidden role="status"></div>
     </div>
 
     <!--
@@ -37,8 +69,8 @@
       graph fails to load. Its ONLY jobs are:
         1. open the boot log, so a stalled start can be diagnosed on screen
         2. report a module graph that never arrived
-      It deliberately does NOT touch the START button's behaviour -- owning that
-      in two places is what caused the lost-first-click bug in v0.1.
+      It deliberately does NOT touch what the buttons DO -- owning that in two
+      places is what caused the lost-first-click bug in v0.1.
     -->
     <script>
       (function () {
@@ -51,8 +83,8 @@
           return e;
         };
         window.__bootMark('H01', 'HTML_READY');
-        // proof for self-test 6 that START could not be clicked too early
-        window.__startInitiallyDisabled = document.getElementById('startBtn').disabled;
+        // proof for the self-test that the entry point could not be clicked too early
+        window.__startInitiallyDisabled = document.getElementById('newBtn').disabled;
 
         window.__bootLogText = function () {
           return window.__bootLog
@@ -66,7 +98,8 @@
         window.__bootError = function (title, body, cmd) {
           if (shown) return;
           shown = true;
-          document.getElementById('startBtn').disabled = true;
+          document.getElementById('newBtn').disabled = true;
+          document.getElementById('openFileBtn').disabled = true;
           document.getElementById('bootErrTitle').textContent = title;
           document.getElementById('bootErrBody').textContent = body;
           document.getElementById('bootErrCmd').textContent = cmd || '';
@@ -79,7 +112,7 @@
           window.__bootMark('H02', 'FILE_PROTOCOL', 'NG');
           window.__bootError(
             'サーバー経由で開いてください',
-            'index.html を直接開くとブラウザがモジュールの読み込みをブロックするため、STARTが動きません。' +
+            'index.html を直接開くとブラウザがモジュールの読み込みをブロックするため、起動できません。' +
               'このフォルダで start.bat を実行するか、下のコマンドを実行して http://localhost:5173 を開いてください。',
             'node server.js'
           );
@@ -121,115 +154,255 @@
       })();
     </script>
 
-    <!-- ================= APP ================= -->
+    <!-- ===================================================================
+         STUDIO
+         ==================================================================== -->
     <div id="app" hidden>
-      <div id="hiddenWarn" hidden>
-        WARNING: Keep this tab in the foreground during performance. ループのタイミングが乱れます。
-      </div>
+      <header id="topbar">
+        <button id="homeBtn" class="chip ghost" type="button" title="Back to your pieces">‹ Pieces</button>
 
-      <header id="bar">
-        <div class="brand">TYPING&nbsp;INSTRUMENT</div>
-        <label class="keep">Sound
-          <select id="soundSet">
-            <option value="electronic">Electronic</option>
-            <option value="minimal">Minimal</option>
-            <option value="noise">Noise</option>
-          </select>
+        <label class="title-wrap">
+          <span class="sr-only">Piece title</span>
+          <input id="titleInput" class="title-input" type="text" maxlength="120" spellcheck="false"
+                 autocomplete="off" aria-label="Piece title" />
         </label>
-        <label class="adv">Tempo <input id="bpm" type="range" min="70" max="170" step="1" value="120" /><span id="bpmVal">120</span></label>
-        <label class="adv">Complexity <input id="complexity" type="range" min="0" max="100" step="1" value="40" /><span id="cxVal">40</span></label>
-        <label class="adv">Timing
-          <select id="quantize">
-            <option value="OFF">Off</option>
-            <option value="LIGHT" selected>Light</option>
-            <option value="STRONG">Strong</option>
-          </select>
-        </label>
-        <label class="keep">Volume <input id="volume" type="range" min="0" max="100" step="1" value="80" /></label>
-        <button id="advBtn" class="ghost">ADVANCED</button>
-        <button id="viewBtn" class="ghost">PERFORM VIEW</button>
+        <span id="saveState" class="savestate" role="status" aria-live="polite"></span>
+        <button id="backupBtn" class="chip warn" type="button" hidden>Download a backup</button>
+
+        <span class="topbar-spacer"></span>
+
+        <button id="stopBtn" class="chip" type="button" title="Stop everything">■ Stop</button>
+        <button id="recBtn" class="chip rec" type="button" title="Record the whole performance">● Capture</button>
+        <button id="replayBtn" class="chip" type="button">▶ Replay</button>
+        <button id="exportBtn" class="chip" type="button" title="Write audio + the performance log to a zip">Export</button>
+        <button id="inspectorBtn" class="chip" type="button" aria-expanded="false">Settings</button>
+        <button id="helpBtn" class="chip" type="button" aria-expanded="false">Help</button>
+        <button id="viewBtn" class="chip" type="button">Perform</button>
       </header>
 
-      <section id="meters" class="adv">
-        <div class="meter"><span class="k">Keys/sec</span><b id="mKps">0.0</b></div>
-        <div class="meter"><span class="k">Intensity</span><b id="mInt">0</b><i class="barwrap"><i id="barInt"></i></i></div>
-        <div class="meter"><span class="k">Groove</span><b id="mGroove">0</b><i class="barwrap"><i id="barGroove"></i></i></div>
-        <div class="meter"><span class="k">Space</span><b id="mSpace">0</b><i class="barwrap"><i id="barSpace"></i></i></div>
-        <div class="meter pulse"><span class="k">Bar</span><i class="dot" id="barDot"></i></div>
-      </section>
+      <div id="hiddenWarn" hidden>
+        Keep this tab in front while you play — a background tab throttles timers and the loops drift.
+      </div>
 
-      <section id="stage">
-        <textarea id="text" spellcheck="false" autocomplete="off" placeholder="type anything — fujirock ni detai"></textarea>
-      </section>
-
-      <section id="createOnly">
-        <div class="panel">
-          <h2>LOOPS <small>Space = phrase &nbsp;·&nbsp; Enter = commit layer</small></h2>
-          <div id="layers"></div>
-          <div class="row addrow">
-            <span class="k">Add foundation:</span>
-            <button data-loop="beat" class="add">Beat</button>
-            <button data-loop="minimal" class="add">Minimal</button>
-            <button data-loop="bass" class="add">Bass</button>
-            <button data-loop="ambient" class="add">Ambient</button>
-            <button data-loop="pulse" class="add">Pulse</button>
+      <main id="stage">
+        <!-- ---------- PLAY SURFACE: the one thing this screen is for ------ -->
+        <section id="play">
+          <textarea id="text" spellcheck="false" autocomplete="off" autocapitalize="off"
+                    aria-label="Play here — every key is an instrument"
+                    placeholder="type anything — fujirock ni detai"></textarea>
+          <div id="roleStrip" class="rolestrip" aria-live="off">
+            <span class="role-now"><i class="dot" id="barDot"></i><b id="cGroup">ready</b></span>
+            <span class="role-key"><span class="k">key</span><b id="cKey">—</b></span>
+            <span class="role-hand"><span class="k">hand</span><b id="cHand">—</b></span>
+            <span class="role-phrase"><span class="k">phrase</span><b id="cPhrase">—</b></span>
+            <span class="role-hold"><span class="k">hold</span><b id="cHold">—</b></span>
           </div>
+          <button id="focusBack" class="focus-back" type="button" hidden>Click here to keep playing</button>
+        </section>
+
+        <!-- ---------- ONE next step, never a list ------------------------- -->
+        <div id="nextStep" class="nextstep" hidden>
+          <span class="ns-body">
+            <b id="nextStepText"></b>
+            <span id="nextStepHint" class="ns-hint"></span>
+          </span>
+          <button id="nextStepClose" class="x" type="button" aria-label="Dismiss this suggestion">×</button>
         </div>
 
-        <div class="panel">
-          <h2>CURRENT</h2>
-          <div class="grid2 adv">
-            <span class="k">Key</span><b id="cKey">—</b>
-            <span class="k">Hand</span><b id="cHand">—</b>
-            <span class="k">Group</span><b id="cGroup">—</b>
-            <span class="k">Phrase</span><b id="cPhrase">—</b>
-            <span class="k">Hold</span><b id="cHold">—</b>
+        <!-- ---------- GUIDED JAM, first run only -------------------------- -->
+        <section id="guided" class="guided" hidden>
+          <div class="guided-head">
+            <span class="guided-step" id="guidedStep">1 / 7</span>
+            <b id="guidedTitle"></b>
+            <button id="guidedClose" class="x" type="button" aria-label="Close the guide">×</button>
           </div>
-          <div class="row">
-            <button id="recBtn" class="rec">● RECORD</button>
-            <button id="stopBtn">■ STOP</button>
-            <button id="replayBtn">▶ REPLAY</button>
-            <button id="exportBtn">EXPORT SESSION</button>
-            <button id="clearBtn" class="warn">CLEAR ALL</button>
+          <p id="guidedBody" class="guided-body"></p>
+          <div id="guidedExtra" class="guided-extra"></div>
+        </section>
+
+        <!-- ---------- COMPOSE A LOOP -------------------------------------- -->
+        <section id="compose" hidden>
+          <div class="compose-head">
+            <b>Type a short phrase</b>
+            <span>Press <kbd>Enter</kbd> to make it loop</span>
+            <span class="compose-target">→ <b id="composeTarget">TRACK 1</b></span>
           </div>
-          <div class="row adv">
-            <button id="debugBtn" class="ghost small">debug</button>
-            <button id="testBtn" class="ghost small">self-test</button>
+          <div class="compose-body">
+            <span class="k">notes waiting</span><b id="pendingCount">0</b>
+            <span class="k">estimated length</span><b id="pendingBars">—</b>
+            <button id="commitBtn" class="primary" type="button">COMMIT LOOP</button>
+            <button id="cancelComposeBtn" class="ghost" type="button">CLOSE — KEEP NOTES</button>
           </div>
-          <div class="row"><span id="status" class="status"></span></div>
+          <p id="composeWhy" class="compose-note">
+            Closing does not throw anything away. What you already played stays waiting, and the
+            next <kbd>Enter</kbd> will still turn it into a loop.
+          </p>
+        </section>
+
+        <!-- ---------- TRACKS ---------------------------------------------- -->
+        <section class="panel" id="tracksPanel">
+          <h2>Tracks <small><kbd>Space</kbd> ends a phrase · <kbd>Enter</kbd> makes a loop · 4 tracks</small></h2>
+          <div id="tracks"></div>
+        </section>
+
+        <!-- ---------- STORY STRIP ----------------------------------------- -->
+        <section class="panel" id="storyPanel">
+          <h2>Story
+            <small>Save a mix, then press the sections in order to perform the arrangement</small>
+          </h2>
+          <div id="storyStrip" class="story-strip"></div>
+          <div class="story-actions">
+            <button id="storyAddBtn" class="chip" type="button">+ Save this mix as a section</button>
+            <button id="storyProposeBtn" class="chip ghost" type="button">Suggest a shape</button>
+            <span id="storyHint" class="hint"></span>
+          </div>
+        </section>
+
+        <!-- ---------- WHERE THIS PIECE IS AT ------------------------------ -->
+        <section class="panel" id="progressPanel">
+          <h2>This piece</h2>
+          <div id="progressBody" class="progress-body"></div>
+        </section>
+      </main>
+
+      <!-- ---------- INSPECTOR (settings, advanced, developer) ------------- -->
+      <aside id="inspector" hidden aria-label="Settings">
+        <div class="inspector-head">
+          <b>Settings</b>
+          <button id="inspectorClose" class="x" type="button" aria-label="Close settings">×</button>
         </div>
 
-        <div class="panel" id="cheat">
-          <h2>WHAT YOUR HANDS DO</h2>
-          <pre class="zones">
+        <div class="inspector-body">
+          <div class="field">
+            <label for="soundSet">Sound</label>
+            <select id="soundSet"></select>
+            <p class="field-hint" id="soundHint"></p>
+            <button id="previewSound" class="chip ghost" type="button">Hear it</button>
+          </div>
+
+          <div class="field">
+            <label for="volume">Volume</label>
+            <input id="volume" type="range" min="0" max="100" step="1" value="80" />
+          </div>
+
+          <div class="field">
+            <label for="bpm">Tempo <span id="bpmVal" class="num">120</span></label>
+            <input id="bpm" type="range" min="70" max="170" step="1" value="120" />
+          </div>
+
+          <div class="field">
+            <label for="complexity">How much the instrument does <span id="cxVal" class="num">40</span></label>
+            <input id="complexity" type="range" min="0" max="100" step="1" value="40" />
+            <p class="field-hint">Low: your keys, plainly. High: repeats climb, hands answer each other, phrases grow.</p>
+          </div>
+
+          <div class="field">
+            <label for="quantize">Timing help</label>
+            <select id="quantize">
+              <option value="OFF">Off — exactly as you played it</option>
+              <option value="LIGHT" selected>Light — nudged towards the grid</option>
+              <option value="STRONG">Strong — locked to the grid</option>
+            </select>
+          </div>
+
+          <details class="field" id="metersWrap">
+            <summary>What you are doing right now</summary>
+            <div id="meters">
+              <div class="meter"><span class="k">Keys/sec</span><b id="mKps">0.0</b></div>
+              <div class="meter"><span class="k">Intensity</span><b id="mInt">0</b><i class="barwrap"><i id="barInt"></i></i></div>
+              <div class="meter"><span class="k">Groove</span><b id="mGroove">0</b><i class="barwrap"><i id="barGroove"></i></i></div>
+              <div class="meter"><span class="k">Space</span><b id="mSpace">0</b><i class="barwrap"><i id="barSpace"></i></i></div>
+              <div class="meter"><span class="k">Voices</span><b id="mVoices">0</b></div>
+            </div>
+          </details>
+
+          <div class="field">
+            <label>This piece</label>
+            <div class="row">
+              <button id="duplicateBtn" class="chip" type="button">Keep this version</button>
+              <button id="downloadProjectBtn" class="chip" type="button">Download project</button>
+            </div>
+            <div class="row">
+              <button id="clearBtn" class="chip warn" type="button">Clear everything</button>
+            </div>
+            <p class="field-hint">
+              “Download project” is a backup of the whole piece. “Export” writes the recorded take:
+              audio plus the full performance log.
+            </p>
+          </div>
+
+          <div class="field devonly">
+            <label>Developer</label>
+            <div class="row">
+              <button id="debugBtn" class="chip ghost" type="button">debug</button>
+              <button id="testBtn" class="chip ghost" type="button">self-test</button>
+              <button id="bootLogBtn" class="chip ghost" type="button">boot log</button>
+              <button id="sessionLogBtn" class="chip ghost" type="button">session log</button>
+            </div>
+            <div id="debug" hidden><div id="debugBody"></div></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ---------- HELP SHEET -------------------------------------------- -->
+      <div id="sheet" hidden role="dialog" aria-modal="true" aria-label="Help">
+        <div class="sheet-card">
+          <div class="sheet-head">
+            <b>What your hands do</b>
+            <button id="sheetClose" class="x" type="button" aria-label="Close help">×</button>
+          </div>
+          <div class="sheet-body">
+            <pre class="zones">
  1 2 3 4 5 6 7 8 9 0   chord bed
  Q W E R T │ Y U I O P   bass  │ bell
  A S D F G │ H J K L ;   drums │ MELODY
  Z X C V B │ N M , . /   low   │ voice</pre>
-          <ul class="rules">
-            <li><b>hold a key</b> → the note holds that long</li>
-            <li><b>same key 4×</b> → drum roll / ratchet</li>
-            <li><b>Shift</b> → deliberately outside note</li>
-            <li><b>type faster</b> → brighter, denser, an octave layer fades in</li>
-            <li><b>steady rhythm</b> → tighter, more echo</li>
-            <li><b>pause then type</b> → accent with a long tail</li>
-            <li><b>Backspace</b> → reverse tail (and it stays in the loop)</li>
-            <li class="locked"><b>Complexity 30+</b> → repeats climb chromatically, long words climb</li>
-            <li class="locked"><b>Complexity 50+</b> → alternating hands add a 5th</li>
-            <li class="locked"><b>Complexity 70+</b> → every 4th note gets a sub</li>
-          </ul>
-          <p class="note">Nothing here is random. Same keys, same timing, same settings → the same performance, note for note. The ambience around it can vary a little between replays.</p>
+            <ul class="rules">
+              <li><b>hold a key</b> → bass, melody, chord and voice keep sounding. On Piano and Plucked they fade
+                by themselves and holding only delays the damping.</li>
+              <li><b>drums, FX and bells</b> → one-shot. They finish on their own; holding does nothing.</li>
+              <li><b>same key 4×</b> → drum roll / ratchet</li>
+              <li><b>Shift</b> → deliberately outside note</li>
+              <li><b>type faster</b> → brighter, denser, an octave layer fades in</li>
+              <li><b>steady rhythm</b> → tighter, more echo</li>
+              <li><b>pause then type</b> → accent with a long tail</li>
+              <li><b>Backspace</b> → reverse tail (and it stays in the loop)</li>
+              <li><b>Space</b> → ends a phrase · <b>Enter</b> → turns what you played into a loop</li>
+            </ul>
+            <h3>Saving</h3>
+            <p>Pieces are saved in this browser, on this computer, automatically. Nothing is uploaded and there is
+              no account. Clearing your browser’s site data deletes them — use <b>Download project</b> for a backup
+              you keep yourself.</p>
+            <h3>Two different “saves”</h3>
+            <p><b>Download project</b> = the whole piece, so you can carry on later or on another machine.
+              <b>Export</b> = one recorded take: the audio, the typed text, and every key and control on one
+              timeline.</p>
+            <h3>What is guaranteed</h3>
+            <p>The same performance log always produces the same notes. The ambience around them can vary a
+              little between replays, and the audio is never sample-identical. Nothing here is random.</p>
+            <div class="row">
+              <button id="replayGuideBtn" class="chip ghost" type="button">Show the guide again</button>
+            </div>
+          </div>
         </div>
-      </section>
+      </div>
 
-      <section id="debug" hidden>
-        <h2>DEBUG</h2>
-        <div class="row">
-          <button id="bootLogBtn" class="ghost small">boot log</button>
-          <button id="sessionLogBtn" class="ghost small">session log</button>
+      <!-- ---------- STARTER KITS ------------------------------------------ -->
+      <div id="kitPicker" hidden role="dialog" aria-modal="true" aria-label="Choose a starting sound">
+        <div class="sheet-card">
+          <div class="sheet-head">
+            <b>Choose a starting sound</b>
+            <button id="kitClose" class="x" type="button" aria-label="Close">×</button>
+          </div>
+          <div class="sheet-body">
+            <p class="lead">Each one sets up a room to play in. The music is still all yours.</p>
+            <div id="kitList" class="kit-list"></div>
+          </div>
         </div>
-        <div id="debugBody"></div>
-      </section>
+      </div>
+
+      <div id="toast" class="toast" hidden role="status"></div>
+      <span id="status" class="sr-only" role="status" aria-live="polite"></span>
     </div>
 
     <script type="module" src="./src/main.js"></script>

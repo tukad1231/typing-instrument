@@ -28,7 +28,7 @@
 // scheduled, which may still be the previous one for up to one lookahead.
 // ---------------------------------------------------------------------------
 
-import { clamp, round3 } from '../core/hash.js';
+import { clamp, round3, deepClone } from '../core/hash.js';
 import { buildLoop } from './builtinLoops.js';
 
 const LAYER_COUNT = 4;
@@ -38,7 +38,16 @@ const BEATS_PER_BAR = 4;
 const MAX_BARS = 8;
 const EPS = 1e-9;
 
-const clone = (v) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
+/**
+ * Structural, not textual.
+ *
+ * This used to be `JSON.parse(JSON.stringify(v))`, which quietly changed the
+ * data on the way through: `undefined` vanished and any non-finite number
+ * became `null`. A PerformanceEvent's fx block is nested two deep, so a shallow
+ * copy of the event was not enough either -- `plan.rel[0].ev.fx.delay = 9` used
+ * to reach all the way back into the live pending buffer.
+ */
+const clone = (v) => (v === undefined ? v : deepClone(v));
 
 export class LoopEngine {
   /**
@@ -254,22 +263,36 @@ export class LoopEngine {
   // -------------------------------------------------------------------------
   // Enter -> commit a layer
   // -------------------------------------------------------------------------
-  commitLayer() {
+  /**
+   * Work out what the pending phrase would become, WITHOUT changing anything.
+   * commitLayer() and the UI both go through this, so a bar count shown on
+   * screen can never disagree with the bar count you actually get.
+   */
+  planPendingLayer() {
     const items = this.pending.filter((p) => p.ev.tag !== 'layer-commit');
     if (!items.length) return null;
-    const target = this._freeLayer();
-    if (target === null) return { error: 'no free layer' };
-
     const anchorBeat = Math.floor(items[0].b / BEATS_PER_BAR) * BEATS_PER_BAR;
-
     let maxRel = 0;
     const rel = items.map((p) => {
       const b = this._quantizeBeats(p.b - anchorBeat);
       maxRel = Math.max(maxRel, b);
-      return { b: round3(b), ev: Object.assign({}, p.ev) };
+      // DEEP, not `Object.assign({}, p.ev)`. A shallow copy shares `fx` and
+      // `chord` with the live pending note, so a caller that only meant to look
+      // at the plan could reach through it and retune a note that is still
+      // waiting to be committed.
+      return { b: round3(b), ev: clone(p.ev) };
     });
-
     const bars = clamp(Math.ceil((maxRel + 0.05) / BEATS_PER_BAR), 1, MAX_BARS);
+    return { anchorBeat, rel, bars, count: items.length };
+  }
+
+  commitLayer() {
+    const plan = this.planPendingLayer();
+    if (!plan) return null;
+    const target = this._freeLayer();
+    if (target === null) return { error: 'no free layer' };
+
+    const { anchorBeat, rel, bars } = plan;
     const layer = this.layers[target];
     this.sound.releaseAll(this._scopePrefix(layer));
     layer.generation++;
@@ -315,18 +338,80 @@ export class LoopEngine {
     return { layer: target };
   }
 
+  /**
+   * Empty a track completely.
+   *
+   * "Completely" now includes `anchorBeat`, `on`, `muted` and `volume`, which
+   * used to survive a clear. An empty track that quietly remembers it was
+   * muted, or still carries the bar line of a loop that no longer exists, is
+   * state with no owner: nothing on screen shows it, nothing can change it, and
+   * the next loop to land in that track inherits it. It also made the engine
+   * state after "add then delete" differ from the state before, which is what
+   * self-test 34 caught.
+   */
   clearLayer(i) {
     const l = this.layers[i];
     if (!l) return;
     this.sound.releaseAll(this._scopePrefix(l));
-    l.generation++;
-    l.kind = null;
-    l.name = '';
-    l.builtinKey = null;
-    l.events = [];
-    l.lengthBeats = 0;
-    l.phraseCount = 0;
+    const generation = l.generation + 1;
+    Object.assign(l, this._blankLayer(i, l.bus), { generation, bus: l.bus });
     this.onChange();
+  }
+
+  /**
+   * Everything needed to put a layer back exactly as it was.
+   *
+   * Deep-copied, so holding on to one of these for an UNDO window cannot be
+   * invalidated by whatever is played next. `generation` and `bus` are
+   * deliberately absent: they belong to the engine and the sound card, not to
+   * the content.
+   */
+  layerContent(i) {
+    const l = this.layers[i];
+    if (!l || !l.events.length) return null;
+    return {
+      layer: i,
+      kind: l.kind,
+      name: l.name,
+      builtinKey: l.builtinKey || null,
+      events: clone(l.events),
+      lengthBeats: l.lengthBeats,
+      anchorBeat: l.anchorBeat,
+      on: l.on,
+      muted: l.muted,
+      volume: l.volume,
+      phraseCount: l.phraseCount,
+    };
+  }
+
+  /**
+   * The other half of layerContent(): "track N now holds exactly this".
+   *
+   * A COMMAND, not an undo primitive -- it replays identically and it is
+   * idempotent, which is what lets UNDO be an ordinary event in the log rather
+   * than a special case that replay has to know about. See RESTORE_LAYER_NOTE
+   * in sessionEvents.js.
+   */
+  restoreLayer(data) {
+    if (!data) return null;
+    const i = data.layer;
+    const l = this.layers[i];
+    if (!l) return null;
+    this.sound.releaseAll(this._scopePrefix(l));
+    l.generation++;
+    l.kind = data.kind ?? null;
+    l.name = data.name ?? '';
+    l.builtinKey = data.builtinKey ?? null;
+    l.events = clone(data.events) || [];
+    l.lengthBeats = data.lengthBeats || 0;
+    l.anchorBeat = data.anchorBeat || 0;
+    l.on = data.on !== false;
+    l.muted = !!data.muted;
+    l.volume = typeof data.volume === 'number' ? data.volume : 1;
+    l.phraseCount = data.phraseCount || 0;
+    this._applyGain(l);
+    this.onChange();
+    return { layer: i };
   }
 
   clearAll() {
@@ -591,6 +676,102 @@ export class LoopEngine {
       }
     }
     this.scheduledUpToBeat = to;
+  }
+
+  /**
+   * READ-ONLY view for the composer UI.
+   *
+   * Separate from snapshot() on purpose: snapshot() is written into
+   * settings.json in every export, so widening it would change the session
+   * format. This one is free to carry whatever the screen needs.
+   *
+   * Everything handed out is a copy, and every number the UI would otherwise
+   * have to recompute (bar counts, the next free track, the pending estimate)
+   * is worked out here, so no constant like "4 beats to a bar" has to be
+   * duplicated in the UI.
+   */
+  composerSnapshot() {
+    const plan = this.planPendingLayer();
+    const layers = this.layers.map((l) => ({
+      id: l.id,
+      kind: l.kind,
+      name: l.name,
+      on: l.on,
+      muted: l.muted,
+      volume: l.volume,
+      lengthBeats: l.lengthBeats,
+      bars: l.lengthBeats ? Math.round(l.lengthBeats / BEATS_PER_BAR) : 0,
+      eventCount: l.events.length,
+      // Cloned all the way down. The UI must not be able to reach into a live
+      // loop, and `fx` and `chord` are nested objects -- copying only the top
+      // level would hand out a shared reference to exactly the parts a caller
+      // is most likely to poke at.
+      events: l.events.map((item) => ({
+        b: item.b,
+        duration: item.ev.duration,
+        instrument: item.ev.instrument,
+        part: item.ev.part || null,
+        note: item.ev.note,
+        sourceSeq: item.ev.sourceSeq,
+        tag: item.ev.tag,
+        fx: clone(item.ev.fx) || null,
+        chord: item.ev.chord ? clone(item.ev.chord) : null,
+      })),
+    }));
+    const filled = layers.filter((l) => l.eventCount > 0);
+    return {
+      bpm: this.bpm,
+      playingBpm: this.playingBpm,
+      beatsPerBar: BEATS_PER_BAR,
+      maxBars: MAX_BARS,
+      layerCount: LAYER_COUNT,
+      nextFreeLayer: this._freeLayer(),
+      pending: { count: plan ? plan.count : 0, bars: plan ? plan.bars : 0 },
+      // Derived HERE, not in the UI: a screen that has to work out for itself
+      // how many tracks are in use is a screen that can disagree with the
+      // engine, and "4" would have to be written down twice.
+      totals: {
+        filled: filled.length,
+        free: LAYER_COUNT - filled.length,
+        notes: filled.reduce((s, l) => s + l.eventCount, 0),
+        audible: filled.filter((l) => l.on && !l.muted).length,
+        longestBars: filled.reduce((m, l) => Math.max(m, l.bars), 0),
+      },
+      layers,
+    };
+  }
+
+  /**
+   * Primitives only, and nothing cloned.
+   *
+   * composerSnapshot() copies every note in every layer, which is exactly right
+   * for rendering and far too expensive to call on every keystroke. The guide
+   * and the suggestion strip only need to know HOW MANY of things there are, so
+   * they get this instead -- cheap enough to poll, and still a view model
+   * rather than a reach into the engine's arrays.
+   */
+  counts() {
+    let filled = 0;
+    let audible = 0;
+    let notes = 0;
+    let typed = 0;
+    for (const l of this.layers) {
+      if (!l.events.length) continue;
+      filled++;
+      notes += l.events.length;
+      if (l.kind === 'typing') typed++;
+      if (l.on && !l.muted && l.volume > 0.01) audible++;
+    }
+    let pending = 0;
+    for (const p of this.pending) if (p.ev.tag !== 'layer-commit') pending++;
+    return { filled, free: LAYER_COUNT - filled, audible, notes, typed, pending, layerCount: LAYER_COUNT };
+  }
+
+  /** seconds one pass of the longest running loop takes, at the playing tempo */
+  loopSeconds() {
+    let maxBeats = 0;
+    for (const l of this.layers) if (l.events.length) maxBeats = Math.max(maxBeats, l.lengthBeats);
+    return maxBeats ? (maxBeats * 60) / this.playingBpm : 0;
   }
 
   snapshot() {

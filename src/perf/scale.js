@@ -31,6 +31,24 @@ export const SCALES = {
     steps: [0, 1, 5, 7, 8],
     tension: [3, 6, 10, 2, 11],
   },
+  // major pentatonic, up where a piano sings: the friendliest set there is.
+  // Nothing in it can sound like a mistake, which is the point for a first
+  // session on an instrument that decays instead of holding.
+  piano: {
+    name: 'major-pentatonic',
+    root: 60, // C4
+    steps: [0, 2, 4, 7, 9],
+    tension: [5, 11, 6, 1, 10],
+  },
+  // suspended pentatonic: open fourths and fifths, which is what a plucked
+  // string flatters most and what makes a short repeated figure sit still
+  // rather than pull towards a resolution.
+  plucked: {
+    name: 'sus-pentatonic',
+    root: 57, // A3
+    steps: [0, 2, 5, 7, 10],
+    tension: [3, 8, 1, 6, 11],
+  },
 };
 
 /** degree -> midi note. Degrees below 0 / above length wrap with octaves. */

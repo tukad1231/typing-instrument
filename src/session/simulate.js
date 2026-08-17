@@ -149,6 +149,13 @@ export function simulateSession(log, mapping, settings0, opts = {}) {
       case EV.CLEAR_LAYER:
         loop.clearLayer(d.layer);
         break;
+      // v4. A command carrying its own content, which is what makes undoing a
+      // delete replay identically. Absent from v2/v3 logs, and the `default`
+      // arm below means an unknown type is skipped rather than fatal -- so a
+      // v4 log opened by an older build degrades instead of breaking.
+      case EV.RESTORE_LAYER:
+        loop.restoreLayer(d);
+        break;
       case EV.CLEAR_ALL:
         loop.clearAll();
         perf.reset();
@@ -178,6 +185,10 @@ export function simulateSession(log, mapping, settings0, opts = {}) {
     layers: loop.snapshot(),
     layerEvents: loop.layers.map((l) => l.events.map((x) => [x.b, x.ev.instrument, x.ev.note, x.ev.velocity, x.ev.tag])),
     perf: out,
+    performanceState: perf.exportState(),
+    // A silent, importable cache derived from the canonical log. The caller
+    // supplies its own current AudioContext time when importing it.
+    loopState: loop.exportState(),
     checkpoint: captured,
     transport: {
       bpm: loop.bpm,

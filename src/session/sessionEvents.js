@@ -30,6 +30,8 @@ export const EV = {
   COMMIT_LAYER: 'commit_layer',
   CLEAR_LAYER: 'clear_layer',
   CLEAR_ALL: 'clear_all',
+  // v4. See RESTORE_LAYER_NOTE below.
+  RESTORE_LAYER: 'restore_layer',
   LAYER_ON: 'layer_on',
   LAYER_MUTE: 'layer_mute',
   LAYER_VOLUME: 'layer_volume',
@@ -61,8 +63,36 @@ export const TAKE_MARKERS = new Set([EV.SESSION_START, EV.RECORD_START, EV.RECOR
 /** Everything that is logged but never re-applied during replay. */
 export const NON_REPLAYED = new Set([...TAKE_MARKERS, ...DERIVED_MARKERS]);
 
-// v3 adds `performanceState` and `loopState` to the opening checkpoint
-// (session_start / record_start). v2 logs without them still replay: the
-// engines fall back to their default state.
-export const FORMAT_VERSION = 3;
-export const ENGINE_VERSION = 'poc-5';
+/**
+ * RESTORE_LAYER_NOTE -- why v0.3 adds an event type, and why it had to.
+ *
+ * Deleting a track had to become undoable. Everything else in the vocabulary
+ * describes something a player DID, and undoing a delete is also something a
+ * player does -- but no existing event can express "put this exact content back
+ * into track 2". ADD_BUILTIN_LOOP only knows the five presets; a typed loop is
+ * a list of notes that exists nowhere else once the layer is cleared.
+ *
+ * Three options were on the table:
+ *
+ *   1. a generic "undo" event -- rejected. It makes the log a diff stream
+ *      instead of a performance, and replaying it means replaying a mistake and
+ *      then un-replaying it.
+ *   2. undo outside the log, by rewinding project state -- rejected. The log
+ *      would then no longer explain the state, so REPLAY and EXPORT would be
+ *      describing a performance that never happened.
+ *   3. a COMMAND that carries the content. Chosen. "Track 2 now holds these
+ *      notes" is a real instruction, it is idempotent, it replays exactly, and
+ *      an exported timeline reads truthfully.
+ *
+ * COMPATIBILITY: v2 and v3 logs simply never contain this type, and every
+ * reader ignores unknown types, so old logs load and replay unchanged. That is
+ * checked by self-test 31.
+ */
+export const RESTORE_LAYER_NOTE = 'see sessionEvents.js';
+
+// v2 -> v3  added `performanceState` / `loopState` to the opening checkpoint.
+// v3 -> v4  added RESTORE_LAYER (see above). Older logs still replay: the
+//           engines fall back to their defaults and the new type never appears.
+export const FORMAT_VERSION = 4;
+export const MIN_READABLE_FORMAT_VERSION = 2;
+export const ENGINE_VERSION = 'poc-6';

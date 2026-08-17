@@ -38,10 +38,20 @@ export class SessionEngine {
    *        state so a trimmed scratch history still begins with something
    *        replayable. Must NOT dispatch.
    */
-  constructor({ now, onTakeOverflow, onScratchCheckpoint, maxEvents, trimKeep }) {
+  constructor({ now, onTakeOverflow, onScratchCheckpoint, onDispatch, maxEvents, trimKeep }) {
     this.now = now;
     this.onTakeOverflow = onTakeOverflow || (() => {});
     this.onScratchCheckpoint = onScratchCheckpoint || null;
+    /**
+     * Fired AFTER an event has been recorded and applied. Deliberately not a
+     * hook that can change or veto anything -- it exists so that "the piece
+     * changed" has one source of truth (autosave uses it) instead of every
+     * call site remembering to say so.
+     *
+     * Replay calls apply(), not dispatch(), so a replay never fires this. That
+     * is correct: replaying a performance does not modify it.
+     */
+    this.onDispatch = onDispatch || null;
 
     // Overridable so tests can exercise trimming with tens of events instead of
     // tens of thousands. Production values are the defaults.
@@ -92,6 +102,14 @@ export class SessionEngine {
     if (this.recordingFlag) this._pushTake(ev);
     this._trim();
     this.apply(ev);
+    if (this.onDispatch) {
+      try {
+        this.onDispatch(ev);
+      } catch (e) {
+        // A listener must never be able to take the performance down with it.
+        if (typeof console !== 'undefined') console.error('onDispatch listener threw', e);
+      }
+    }
     return ev;
   }
 
